@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Keyboard } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, BORDER_RADIUS } from '../../constants/theme';
 import { authService } from '../../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import CustomAlert from '../../components/CustomAlert';
+import ScreenWrapper from '../../components/ScreenWrapper';
 
 export default function SignupScreen() {
     const router = useRouter();
+    const [countryCode, setCountryCode] = useState('+91');
     const [formData, setFormData] = useState({
         fullName: '',
         age: '',
@@ -16,6 +18,12 @@ export default function SignupScreen() {
         phone: '',
         bio: '',
     });
+
+    // Refs for input focus chaining
+    const ageRef = useRef<TextInput>(null);
+    const phoneRef = useRef<TextInput>(null);
+    const bioRef = useRef<TextInput>(null);
+
     const [loading, setLoading] = useState(false);
     const [alert, setAlert] = useState<{
         visible: boolean;
@@ -35,13 +43,12 @@ export default function SignupScreen() {
     };
 
     const validatePhoneNumber = (phone: string): boolean => {
-        const cleaned = phone.replace(/[^\d+]/g, '');
-        if (!cleaned.startsWith('+')) return false;
-        const digits = cleaned.substring(1);
-        return digits.length >= 10 && digits.length <= 15;
+        const cleaned = phone.replace(/[^\d]/g, '');
+        return cleaned.length >= 10 && cleaned.length <= 15;
     };
 
     const handleSendOTP = async () => {
+        Keyboard.dismiss();
         // Validate all fields
         if (!formData.fullName.trim()) {
             showAlert('error', 'Missing Information', 'Please enter your full name');
@@ -69,6 +76,11 @@ export default function SignupScreen() {
             return;
         }
 
+        if (!countryCode || !countryCode.startsWith('+')) {
+            showAlert('error', 'Invalid Country Code', 'Please enter a valid country code starting with +');
+            return;
+        }
+
         if (!formData.phone.trim()) {
             showAlert('error', 'Missing Information', 'Please enter your phone number');
             return;
@@ -78,12 +90,12 @@ export default function SignupScreen() {
             showAlert(
                 'error',
                 'Invalid Phone Number',
-                'Please enter a valid international phone number starting with + (e.g., +1234567890)'
+                'Please enter a valid phone number'
             );
             return;
         }
 
-        const formattedPhone = formData.phone.startsWith('+') ? formData.phone : `+${formData.phone}`;
+        const formattedPhone = `${countryCode}${formData.phone}`;
 
         setLoading(true);
         try {
@@ -138,140 +150,136 @@ export default function SignupScreen() {
     };
 
     return (
-        <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.container}
-        >
+        <ScreenWrapper scrollable>
             <LinearGradient
                 colors={[COLORS.primaryDark, COLORS.dark, COLORS.mediumDark]}
                 style={StyleSheet.absoluteFillObject}
             />
 
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-                {/* Header */}
-                <View style={styles.header}>
-                    <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                        <Text style={styles.backText}>← Back</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.logo}>ALINGO.</Text>
+            <View style={styles.header}>
+                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                    <Text style={styles.backText}>← Back</Text>
+                </TouchableOpacity>
+                <Text style={styles.logo}>ALINGO.</Text>
+            </View>
+
+            <View style={styles.card}>
+                <Text style={styles.title}>Create Account</Text>
+                <Text style={styles.subtitle}>Join our ride-sharing community</Text>
+
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Full Name *</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="John Doe"
+                        placeholderTextColor="#999"
+                        value={formData.fullName}
+                        onChangeText={(text) => setFormData({ ...formData, fullName: text })}
+                        returnKeyType="next"
+                        onSubmitEditing={() => ageRef.current?.focus()}
+                        blurOnSubmit={false}
+                    />
                 </View>
 
-                {/* Card */}
-                <View style={styles.card}>
-                    <Text style={styles.title}>Create Account</Text>
-                    <Text style={styles.subtitle}>Join our ride-sharing community</Text>
-
-                    {/* Full Name */}
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Full Name *</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Enter your full name"
-                            placeholderTextColor="#999"
-                            value={formData.fullName}
-                            onChangeText={(text) => setFormData({ ...formData, fullName: text })}
-                        />
-                    </View>
-
-                    {/* Age */}
-                    <View style={styles.inputGroup}>
+                <View style={styles.row}>
+                    <View style={[styles.inputGroup, styles.halfInput]}>
                         <Text style={styles.label}>Age *</Text>
                         <TextInput
+                            ref={ageRef}
                             style={styles.input}
-                            placeholder="Your age"
+                            placeholder="25"
                             placeholderTextColor="#999"
                             value={formData.age}
-                            onChangeText={(text) => setFormData({ ...formData, age: text })}
-                            keyboardType="number-pad"
-                            maxLength={2}
+                            onChangeText={(text) => setFormData({ ...formData, age: text.replace(/[^0-9]/g, '') })}
+                            keyboardType="numeric"
+                            maxLength={3}
+                            returnKeyType="done"
                         />
                     </View>
 
-                    {/* Gender */}
-                    <View style={styles.inputGroup}>
+                    <View style={[styles.inputGroup, styles.halfInput]}>
                         <Text style={styles.label}>Gender *</Text>
                         <View style={styles.genderContainer}>
-                            <TouchableOpacity
-                                style={[styles.genderButton, formData.gender === 'Male' && styles.genderButtonActive]}
-                                onPress={() => setFormData({ ...formData, gender: 'Male' })}
-                            >
-                                <Text style={[styles.genderButtonText, formData.gender === 'Male' && styles.genderButtonTextActive]}>
-                                    Male
-                                </Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={[styles.genderButton, formData.gender === 'Female' && styles.genderButtonActive]}
-                                onPress={() => setFormData({ ...formData, gender: 'Female' })}
-                            >
-                                <Text style={[styles.genderButtonText, formData.gender === 'Female' && styles.genderButtonTextActive]}>
-                                    Female
-                                </Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={[styles.genderButton, formData.gender === 'Other' && styles.genderButtonActive]}
-                                onPress={() => setFormData({ ...formData, gender: 'Other' })}
-                            >
-                                <Text style={[styles.genderButtonText, formData.gender === 'Other' && styles.genderButtonTextActive]}>
-                                    Other
-                                </Text>
-                            </TouchableOpacity>
+                            {['Male', 'Female'].map((option) => (
+                                <TouchableOpacity
+                                    key={option}
+                                    style={[
+                                        styles.genderButton,
+                                        formData.gender === option && styles.genderButtonActive
+                                    ]}
+                                    onPress={() => setFormData({ ...formData, gender: option })}
+                                >
+                                    <Text style={[
+                                        styles.genderText,
+                                        formData.gender === option && styles.genderTextActive
+                                    ]}>{option}</Text>
+                                </TouchableOpacity>
+                            ))}
                         </View>
                     </View>
+                </View>
 
-                    {/* Phone Number */}
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Phone Number *</Text>
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Phone Number *</Text>
+                    <View style={styles.phoneInputContainer}>
+                        <View style={styles.countryCodeContainer}>
+                            <TextInput
+                                style={styles.countryCodeInput}
+                                value={countryCode}
+                                onChangeText={setCountryCode}
+                                keyboardType="phone-pad"
+                                maxLength={5}
+                            />
+                        </View>
                         <TextInput
-                            style={styles.input}
-                            placeholder="+1234567890"
+                            ref={phoneRef}
+                            style={styles.phoneInput}
+                            placeholder="1234567890"
                             placeholderTextColor="#999"
                             value={formData.phone}
-                            onChangeText={(text) => setFormData({ ...formData, phone: text })}
+                            onChangeText={(text) => setFormData({ ...formData, phone: text.replace(/[^0-9]/g, '') })}
                             keyboardType="phone-pad"
-                            maxLength={17}
+                            maxLength={10}
+                            returnKeyType="next"
+                            onSubmitEditing={() => bioRef.current?.focus()}
                         />
-                    </View>
-
-                    {/* Bio */}
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Bio (Optional)</Text>
-                        <TextInput
-                            style={[styles.input, styles.textArea]}
-                            placeholder="Tell us about yourself..."
-                            placeholderTextColor="#999"
-                            value={formData.bio}
-                            onChangeText={(text) => setFormData({ ...formData, bio: text })}
-                            multiline
-                            numberOfLines={3}
-                            maxLength={150}
-                        />
-                        <Text style={styles.charCount}>{formData.bio.length}/150</Text>
-                    </View>
-
-                    {/* Send OTP Button */}
-                    <TouchableOpacity
-                        style={[styles.button, loading && styles.buttonDisabled]}
-                        onPress={handleSendOTP}
-                        disabled={loading}
-                    >
-                        <Text style={styles.buttonText}>
-                            {loading ? 'Sending OTP...' : 'Send OTP'}
-                        </Text>
-                    </TouchableOpacity>
-
-                    {/* Login Link */}
-                    <View style={styles.footer}>
-                        <Text style={styles.footerText}>Already have an account? </Text>
-                        <TouchableOpacity onPress={() => router.push('/auth/login')}>
-                            <Text style={styles.footerLink}>Login</Text>
-                        </TouchableOpacity>
                     </View>
                 </View>
-            </ScrollView>
 
-            {/* Custom Alert */}
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Bio (Optional)</Text>
+                    <TextInput
+                        ref={bioRef}
+                        style={[styles.input, styles.textArea]}
+                        placeholder="Tell us about yourself..."
+                        placeholderTextColor="#999"
+                        value={formData.bio}
+                        onChangeText={(text) => setFormData({ ...formData, bio: text })}
+                        multiline
+                        numberOfLines={4}
+                        textAlignVertical="top"
+                    />
+                    <Text style={styles.charCount}>{formData.bio.length}/150</Text>
+                </View>
+
+                <TouchableOpacity
+                    style={[styles.button, loading && styles.buttonDisabled]}
+                    onPress={handleSendOTP}
+                    disabled={loading}
+                >
+                    <Text style={styles.buttonText}>
+                        {loading ? 'Sending OTP...' : 'Next Step'}
+                    </Text>
+                </TouchableOpacity>
+
+                <View style={styles.footer}>
+                    <Text style={styles.footerText}>Already have an account? </Text>
+                    <TouchableOpacity onPress={() => router.push('/auth/login')}>
+                        <Text style={styles.footerLink}>Login</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+
             <CustomAlert
                 visible={alert.visible}
                 type={alert.type}
@@ -287,21 +295,13 @@ export default function SignupScreen() {
                     }
                 }}
             />
-        </KeyboardAvoidingView>
+        </ScreenWrapper>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: COLORS.background,
-    },
-    scrollContent: {
-        flexGrow: 1,
-        paddingBottom: SPACING.xl,
-    },
     header: {
-        paddingTop: SPACING.xxl + SPACING.lg,
+        paddingTop: SPACING.lg,
         paddingHorizontal: SPACING.xl,
         paddingBottom: SPACING.lg,
     },
@@ -325,8 +325,9 @@ const styles = StyleSheet.create({
         borderTopRightRadius: BORDER_RADIUS.xl,
         paddingHorizontal: SPACING.xl,
         paddingTop: SPACING.xxl,
-        paddingBottom: SPACING.xxl,
-        minHeight: 600,
+        paddingBottom: SPACING.xxl + SPACING.lg,
+        minHeight: 500, // Increased minHeight for better scroll feel
+        flex: 1,
     },
     title: {
         fontSize: 28,
@@ -341,13 +342,40 @@ const styles = StyleSheet.create({
         marginBottom: SPACING.xl,
     },
     inputGroup: {
-        marginBottom: SPACING.lg,
+        marginBottom: SPACING.lg, // Slightly improved spacing
     },
     label: {
         fontSize: 15,
         fontWeight: '600',
         color: COLORS.inputText,
-        marginBottom: SPACING.sm,
+        marginBottom: SPACING.xs, // Tighter label spacing
+    },
+    phoneInputContainer: {
+        flexDirection: 'row',
+        backgroundColor: COLORS.inputBackground,
+        borderRadius: BORDER_RADIUS.md,
+        overflow: 'hidden',
+    },
+    countryCodeContainer: {
+        width: 70,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderRightWidth: 1,
+        borderRightColor: 'rgba(0,0,0,0.1)',
+    },
+    countryCodeInput: {
+        fontSize: 16,
+        color: COLORS.inputText,
+        fontWeight: '600',
+        textAlign: 'center',
+        paddingVertical: SPACING.md + 2,
+    },
+    phoneInput: {
+        flex: 1,
+        paddingHorizontal: SPACING.md,
+        paddingVertical: SPACING.md + 2,
+        fontSize: 16,
+        color: COLORS.inputText,
     },
     input: {
         backgroundColor: COLORS.inputBackground,
@@ -358,7 +386,7 @@ const styles = StyleSheet.create({
         color: COLORS.inputText,
     },
     textArea: {
-        minHeight: 80,
+        height: 100,
         textAlignVertical: 'top',
         paddingTop: SPACING.md,
     },
@@ -369,37 +397,47 @@ const styles = StyleSheet.create({
         textAlign: 'right',
         marginTop: SPACING.xs,
     },
+    row: {
+        flexDirection: 'row',
+        gap: SPACING.md,
+    },
+    halfInput: {
+        flex: 1,
+    },
     genderContainer: {
         flexDirection: 'row',
-        gap: SPACING.sm,
+        gap: SPACING.md,
+        height: 50, // Fixed height for alignment
     },
     genderButton: {
         flex: 1,
         backgroundColor: COLORS.inputBackground,
         borderRadius: BORDER_RADIUS.md,
-        paddingVertical: SPACING.md,
         alignItems: 'center',
-        borderWidth: 2,
+        justifyContent: 'center',
+        borderWidth: 1,
         borderColor: 'transparent',
     },
     genderButtonActive: {
-        backgroundColor: COLORS.button,
+        backgroundColor: COLORS.lightGreen,
         borderColor: COLORS.button,
     },
-    genderButtonText: {
-        fontSize: 14,
-        fontWeight: '600',
+    genderText: {
+        fontSize: 16,
         color: COLORS.inputText,
+        opacity: 0.7,
     },
-    genderButtonTextActive: {
-        color: COLORS.buttonText,
+    genderTextActive: {
+        color: COLORS.button, // Fixed color
+        fontWeight: '600',
+        opacity: 1,
     },
     button: {
         backgroundColor: COLORS.button,
         borderRadius: BORDER_RADIUS.md,
         paddingVertical: SPACING.md + 6,
         alignItems: 'center',
-        marginTop: SPACING.xl,
+        marginTop: SPACING.md,
     },
     buttonDisabled: {
         opacity: 0.6,
@@ -413,6 +451,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'center',
         marginTop: SPACING.lg,
+        marginBottom: SPACING.xl, // Add bottom padding for better scroll end
     },
     footerText: {
         color: COLORS.inputText,

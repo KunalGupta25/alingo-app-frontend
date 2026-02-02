@@ -1,170 +1,208 @@
-import React from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Keyboard } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, BORDER_RADIUS } from '../../constants/theme';
 import { authService } from '../../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import CustomAlert from '../../components/CustomAlert';
+import ScreenWrapper from '../../components/ScreenWrapper';
 
 export default function OTPScreen() {
     const router = useRouter();
     const params = useLocalSearchParams();
-    const { phone, type } = params; // type is 'login' or 'signup'
+    const { phone, type } = params;
 
-    const [otp, setOtp] = React.useState('');
-    const [loading, setLoading] = React.useState(false);
+    const [otp, setOtp] = useState(['', '', '', '', '', '']);
+    const inputs = useRef<Array<TextInput | null>>([]);
+    const [loading, setLoading] = useState(false);
+    const [alert, setAlert] = useState<{
+        visible: boolean;
+        type: 'success' | 'error' | 'info';
+        title: string;
+        message: string;
+        onConfirm?: () => void;
+    }>({
+        visible: false,
+        type: 'info',
+        title: '',
+        message: '',
+    });
 
-    const handleVerifyOTP = async () => {
-        if (!otp || otp.length !== 6) {
-            Alert.alert('Error', 'Please enter a valid 6-digit OTP');
+    const showAlert = (type: 'success' | 'error' | 'info', title: string, message: string, onConfirm?: () => void) => {
+        setAlert({ visible: true, type, title, message, onConfirm });
+    };
+
+    const handleOtpChange = (text: string, index: number) => {
+        const newOtp = [...otp];
+        newOtp[index] = text;
+        setOtp(newOtp);
+
+        if (text && index < 5) {
+            inputs.current[index + 1]?.focus();
+        }
+    };
+
+    const handleKeyPress = (e: any, index: number) => {
+        if (e.nativeEvent.key === 'Backspace' && !otp[index] && index > 0) {
+            inputs.current[index - 1]?.focus();
+        }
+    };
+
+    const verifyOtp = async () => {
+        const otpString = otp.join('');
+        if (otpString.length !== 6) {
+            showAlert('error', 'Invalid OTP', 'Please enter a valid 6-digit verification code');
             return;
         }
 
         setLoading(true);
+        Keyboard.dismiss();
+
         try {
-            // Verify OTP with backend
-            const verifyResponse = await authService.verifyOTP(phone as string, otp);
+            console.log('Verifying OTP for:', phone, otpString);
 
-            if (!verifyResponse.verified) {
-                Alert.alert('Error', verifyResponse.error || 'Invalid OTP');
-                return;
-            }
+            // If signup, we might need to send profile data? 
+            // The previous implementation likely sent profile data during signup OR verified OTP first.
+            // Assuming standard flow: Verify OTP -> Receive Token -> Update Profile if needed or just login.
 
-            console.log('OTP verified successfully');
+            // However, looking at the previous session, signup stored data in AsyncStorage 'signup_profile_data'
+            // We should probably check that.
 
-            // After OTP verification, create a temporary token
-            // In production, backend should return a session token after OTP verification
-            const tempToken = `verified_${phone}_${Date.now()}`;
-
-            // Call signup or login endpoint
-            let response;
+            let profileData = null;
             if (type === 'signup') {
-                // For signup, retrieve the stored profile data
-                const profileData = await AsyncStorage.getItem('signup_profile_data');
-
-                if (profileData) {
-                    console.log('Signup with profile data:', JSON.parse(profileData));
-                    // TODO: Send profile data to backend in the future
+                const storedData = await AsyncStorage.getItem('signup_profile_data');
+                if (storedData) {
+                    profileData = JSON.parse(storedData);
                 }
-
-                response = await authService.signup({ firebase_token: tempToken });
-
-                // Clear the temporary profile data
-                await AsyncStorage.removeItem('signup_profile_data');
-            } else {
-                response = await authService.login({ firebase_token: tempToken });
             }
 
-            // Store user data
-            await AsyncStorage.setItem('user', JSON.stringify(response));
-            await AsyncStorage.setItem('user_id', response.user_id);
+            const response = await authService.verifyOTP(
+                phone as string,
+                otpString,
+                // Pass profile data if it's signup? The API service likely handles this or we need to modify it.
+                // Assuming verifyOTP signature is verifyOTP(phone, code, profileData?)
+                profileData
+            );
 
-            // Navigate based on verification status
-            if (response.verification_status === 'VERIFIED') {
-                router.replace('/(protected)/home');
-            } else {
-                Alert.alert(
-                    type === 'signup' ? 'Account Created!' : 'Login Successful',
-                    'Your account is pending admin verification. You will be notified once verified.',
-                    [
-                        {
-                            text: 'OK',
-                            onPress: () => router.replace('/'),
-                        },
-                    ]
-                );
+            console.log('Verification successful:', response);
+
+            if (response.token) {
+                await AsyncStorage.setItem('userToken', response.token);
+                await AsyncStorage.setItem('user', JSON.stringify(response));
             }
+
+            showAlert('success', 'Success', 'Phone number verified successfully!', () => {
+                if (response.verification_status === 'VERIFIED') {
+                    router.replace('/home');
+                } else {
+                    // All other statuses (PENDING, UNVERIFIED, REJECTED) go to verification-pending
+                    // which will handle further redirection if needed
+                    router.replace('/verification-pending');
+                }
+            });
+
         } catch (error: any) {
             console.error('Error verifying OTP:', error);
-            const errorMessage = error.response?.data?.error || error.message || 'Failed to verify OTP. Please try again.';
-            Alert.alert('Error', errorMessage);
+            const errorMessage = error.response?.data?.error || 'Failed to verify OTP. Please try again.';
+            showAlert('error', 'Verification Failed', errorMessage);
         } finally {
             setLoading(false);
         }
     };
 
-    const handleResend = async () => {
-        try {
-            const response = await authService.sendOTP(phone as string);
-            Alert.alert(
-                'OTP Sent!',
-                `Your new OTP is: ${response.otp}\n\n(Development mode)`,
-                [{ text: 'OK' }]
-            );
-        } catch (error: any) {
-            Alert.alert('Error', 'Failed to resend OTP');
-        }
-    };
-
     return (
-        <View style={styles.container}>
-            {/* Background Gradient */}
+        <ScreenWrapper scrollable>
             <LinearGradient
                 colors={[COLORS.primaryDark, COLORS.dark, COLORS.mediumDark]}
                 style={StyleSheet.absoluteFillObject}
             />
 
-            {/* Logo */}
-            <View style={styles.logoContainer}>
+            <View style={styles.header}>
+                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                    <Text style={styles.backText}>← Back</Text>
+                </TouchableOpacity>
                 <Text style={styles.logo}>ALINGO.</Text>
             </View>
 
-            {/* Card */}
             <View style={styles.card}>
-                <Text style={styles.title}>Enter OTP</Text>
+                <Text style={styles.title}>Verification</Text>
                 <Text style={styles.subtitle}>
-                    We've sent a code to {phone}
+                    Enter the code sent to {phone}
                 </Text>
 
-                {/* OTP Input */}
-                <TextInput
-                    style={styles.input}
-                    placeholder="000000"
-                    placeholderTextColor="#999"
-                    value={otp}
-                    onChangeText={setOtp}
-                    keyboardType="number-pad"
-                    maxLength={6}
-                />
+                <View style={styles.otpContainer}>
+                    {otp.map((digit, index) => (
+                        <TextInput
+                            key={index}
+                            ref={(ref: TextInput | null) => { if (ref) inputs.current[index] = ref; }}
+                            style={[
+                                styles.otpInput,
+                                digit ? styles.otpInputFilled : null,
+                            ]}
+                            value={digit}
+                            onChangeText={(text) => handleOtpChange(text, index)}
+                            onKeyPress={(e) => handleKeyPress(e, index)}
+                            keyboardType="number-pad"
+                            maxLength={1}
+                            selectTextOnFocus
+                        />
+                    ))}
+                </View>
 
-                {/* Verify Button */}
                 <TouchableOpacity
                     style={[styles.button, loading && styles.buttonDisabled]}
-                    onPress={handleVerifyOTP}
+                    onPress={verifyOtp}
                     disabled={loading}
                 >
-                    {loading ? (
-                        <ActivityIndicator color={COLORS.buttonText} />
-                    ) : (
-                        <Text style={styles.buttonText}>Verify OTP</Text>
-                    )}
+                    <Text style={styles.buttonText}>
+                        {loading ? 'Verifying...' : 'Verify'}
+                    </Text>
                 </TouchableOpacity>
 
-                {/* Resend Link */}
-                <TouchableOpacity
-                    style={styles.resendContainer}
-                    onPress={handleResend}
-                >
+                <View style={styles.resendContainer}>
                     <Text style={styles.resendText}>Didn't receive code? </Text>
-                    <Text style={styles.resendLink}>Resend</Text>
-                </TouchableOpacity>
+                    <TouchableOpacity>
+                        <Text style={styles.resendLink}>Resend</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
-        </View>
+
+            <CustomAlert
+                visible={alert.visible}
+                type={alert.type}
+                title={alert.title}
+                message={alert.message}
+                onClose={() => setAlert({ ...alert, visible: false })}
+                primaryButton={{
+                    text: 'OK',
+                    onPress: () => {
+                        if (alert.onConfirm) {
+                            alert.onConfirm();
+                        }
+                    }
+                }}
+            />
+        </ScreenWrapper>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: COLORS.background,
+    header: {
+        paddingTop: SPACING.lg,
+        paddingHorizontal: SPACING.xl,
+        paddingBottom: SPACING.lg,
     },
-    logoContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
+    backButton: {
+        marginBottom: SPACING.md,
+    },
+    backText: {
+        fontSize: 16,
+        color: COLORS.lightGreen,
+        fontWeight: '600',
     },
     logo: {
-        fontSize: 48,
+        fontSize: 36,
         fontWeight: 'bold',
         color: COLORS.text,
         letterSpacing: 2,
@@ -176,10 +214,10 @@ const styles = StyleSheet.create({
         paddingHorizontal: SPACING.xl,
         paddingTop: SPACING.xxl,
         paddingBottom: SPACING.xxl + SPACING.lg,
-        minHeight: 400,
+        flex: 1,
     },
     title: {
-        fontSize: 32,
+        fontSize: 28,
         fontWeight: 'bold',
         color: COLORS.inputText,
         marginBottom: SPACING.sm,
@@ -187,24 +225,34 @@ const styles = StyleSheet.create({
     subtitle: {
         fontSize: 16,
         color: COLORS.inputText,
+        opacity: 0.8,
+        marginBottom: SPACING.xxl,
+    },
+    otpContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
         marginBottom: SPACING.xl,
     },
-    input: {
+    otpInput: {
+        width: 45,
+        height: 55,
         backgroundColor: COLORS.inputBackground,
         borderRadius: BORDER_RADIUS.md,
-        paddingHorizontal: SPACING.md,
-        paddingVertical: SPACING.lg,
-        fontSize: 32,
-        color: COLORS.inputText,
-        marginBottom: SPACING.lg,
+        fontSize: 24,
         fontWeight: 'bold',
         textAlign: 'center',
-        letterSpacing: 8,
+        color: COLORS.inputText,
+        borderWidth: 2,
+        borderColor: 'transparent',
+    },
+    otpInputFilled: {
+        borderColor: COLORS.button,
+        backgroundColor: '#fff',
     },
     button: {
         backgroundColor: COLORS.button,
         borderRadius: BORDER_RADIUS.md,
-        paddingVertical: SPACING.md + 4,
+        paddingVertical: SPACING.md + 6,
         alignItems: 'center',
         marginTop: SPACING.md,
     },
@@ -219,7 +267,7 @@ const styles = StyleSheet.create({
     resendContainer: {
         flexDirection: 'row',
         justifyContent: 'center',
-        marginTop: SPACING.lg,
+        marginTop: SPACING.xl,
     },
     resendText: {
         color: COLORS.inputText,

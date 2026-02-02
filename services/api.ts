@@ -23,8 +23,8 @@ export const authService = {
         return response.data;
     },
 
-    verifyOTP: async (phone: string, otp: string) => {
-        const response = await api.post('/auth/otp/verify', { phone, otp });
+    verifyOTP: async (phone: string, otp: string, profileData?: any) => {
+        const response = await api.post('/auth/otp/verify', { phone, otp, ...profileData });
         return response.data;
     },
 
@@ -35,6 +35,38 @@ export const authService = {
 
     login: async (data: { firebase_token: string }) => {
         const response = await api.post(API_ENDPOINTS.LOGIN, data);
+        return response.data;
+    },
+};
+
+// Verification Services
+export const verificationService = {
+    submitVerification: async (data: {
+        documentType: string;
+        documentImage: { uri: string; type: string; name: string };
+        faceImage: { uri: string; type: string; name: string };
+        token: string;
+    }) => {
+        const formData = new FormData();
+        formData.append('document_type', data.documentType);
+        formData.append('document_image', data.documentImage as any);
+        formData.append('face_image', data.faceImage as any);
+
+        const response = await api.post('/api/verification/submit', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+                'Authorization': `Bearer ${data.token}`,
+            },
+        });
+        return response.data;
+    },
+
+    getStatus: async (token: string) => {
+        const response = await api.get('/api/verification/status', {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
         return response.data;
     },
 };

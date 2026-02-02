@@ -1,13 +1,15 @@
 import React from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Keyboard } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, BORDER_RADIUS } from '../../constants/theme';
 import { authService } from '../../services/api';
 import CustomAlert from '../../components/CustomAlert';
+import ScreenWrapper from '../../components/ScreenWrapper';
 
 export default function LoginScreen() {
     const router = useRouter();
+    const [countryCode, setCountryCode] = React.useState('+91');
     const [phone, setPhone] = React.useState('');
     const [loading, setLoading] = React.useState(false);
     const [alert, setAlert] = React.useState<{
@@ -28,12 +30,19 @@ export default function LoginScreen() {
     };
 
     const handleSendOTP = async () => {
+        Keyboard.dismiss();
+        
         if (!phone || phone.length < 10) {
-            showAlert('error', 'Invalid Phone Number', 'Please enter a valid phone number with country code (e.g., +1234567890)');
+            showAlert('error', 'Invalid Phone Number', 'Please enter a valid phone number');
             return;
         }
 
-        const formattedPhone = phone.startsWith('+') ? phone : `+${phone}`;
+        if (!countryCode || !countryCode.startsWith('+')) {
+            showAlert('error', 'Invalid Country Code', 'Please enter a valid country code starting with +');
+            return;
+        }
+
+        const formattedPhone = `${countryCode}${phone}`;
 
         setLoading(true);
         try {
@@ -71,58 +80,66 @@ export default function LoginScreen() {
     };
 
     return (
-        <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.container}
-        >
+        <ScreenWrapper scrollable>
             <LinearGradient
                 colors={[COLORS.primaryDark, COLORS.dark, COLORS.mediumDark]}
                 style={StyleSheet.absoluteFillObject}
             />
 
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-                <View style={styles.header}>
-                    <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                        <Text style={styles.backText}>← Back</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.logo}>ALINGO.</Text>
-                </View>
+            <View style={styles.header}>
+                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                    <Text style={styles.backText}>← Back</Text>
+                </TouchableOpacity>
+                <Text style={styles.logo}>ALINGO.</Text>
+            </View>
 
-                <View style={styles.card}>
-                    <Text style={styles.title}>Welcome Back!</Text>
-                    <Text style={styles.subtitle}>Login to continue your journey</Text>
+            <View style={styles.card}>
+                <Text style={styles.title}>Welcome Back!</Text>
+                <Text style={styles.subtitle}>Login to continue your journey</Text>
 
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Phone Number</Text>
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Phone Number</Text>
+                    <View style={styles.phoneInputContainer}>
+                        <View style={styles.countryCodeContainer}>
+                            <TextInput
+                                style={styles.countryCodeInput}
+                                value={countryCode}
+                                onChangeText={setCountryCode}
+                                keyboardType="phone-pad"
+                                maxLength={5}
+                            />
+                        </View>
                         <TextInput
-                            style={styles.input}
-                            placeholder="+1234567890"
+                            style={styles.phoneInput}
+                            placeholder="1234567890"
                             placeholderTextColor="#999"
                             value={phone}
-                            onChangeText={setPhone}
+                            onChangeText={(text) => setPhone(text.replace(/[^0-9]/g, ''))}
                             keyboardType="phone-pad"
-                            maxLength={17}
+                            maxLength={10}
+                            returnKeyType="done"
+                            onSubmitEditing={handleSendOTP}
                         />
                     </View>
-
-                    <TouchableOpacity
-                        style={[styles.button, loading && styles.buttonDisabled]}
-                        onPress={handleSendOTP}
-                        disabled={loading}
-                    >
-                        <Text style={styles.buttonText}>
-                            {loading ? 'Sending OTP...' : 'Send OTP'}
-                        </Text>
-                    </TouchableOpacity>
-
-                    <View style={styles.footer}>
-                        <Text style={styles.footerText}>Don't have an account? </Text>
-                        <TouchableOpacity onPress={() => router.push('/auth/signup')}>
-                            <Text style={styles.footerLink}>Sign up</Text>
-                        </TouchableOpacity>
-                    </View>
                 </View>
-            </ScrollView>
+
+                <TouchableOpacity
+                    style={[styles.button, loading && styles.buttonDisabled]}
+                    onPress={handleSendOTP}
+                    disabled={loading}
+                >
+                    <Text style={styles.buttonText}>
+                        {loading ? 'Sending OTP...' : 'Send OTP'}
+                    </Text>
+                </TouchableOpacity>
+
+                <View style={styles.footer}>
+                    <Text style={styles.footerText}>Don't have an account? </Text>
+                    <TouchableOpacity onPress={() => router.push('/auth/signup')}>
+                        <Text style={styles.footerLink}>Sign up</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
 
             <CustomAlert
                 visible={alert.visible}
@@ -139,20 +156,13 @@ export default function LoginScreen() {
                     }
                 }}
             />
-        </KeyboardAvoidingView>
+        </ScreenWrapper>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: COLORS.background,
-    },
-    scrollContent: {
-        flexGrow: 1,
-    },
     header: {
-        paddingTop: SPACING.xxl + SPACING.lg,
+        paddingTop: SPACING.lg,
         paddingHorizontal: SPACING.xl,
         paddingBottom: SPACING.lg,
     },
@@ -200,9 +210,28 @@ const styles = StyleSheet.create({
         color: COLORS.inputText,
         marginBottom: SPACING.sm,
     },
-    input: {
+    phoneInputContainer: {
+        flexDirection: 'row',
         backgroundColor: COLORS.inputBackground,
         borderRadius: BORDER_RADIUS.md,
+        overflow: 'hidden',
+    },
+    countryCodeContainer: {
+        width: 70,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderRightWidth: 1,
+        borderRightColor: 'rgba(0,0,0,0.1)',
+    },
+    countryCodeInput: {
+        fontSize: 16,
+        color: COLORS.inputText,
+        fontWeight: '600',
+        textAlign: 'center',
+        paddingVertical: SPACING.md + 2,
+    },
+    phoneInput: {
+        flex: 1,
         paddingHorizontal: SPACING.md,
         paddingVertical: SPACING.md + 2,
         fontSize: 16,

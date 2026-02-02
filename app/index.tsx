@@ -20,10 +20,14 @@ export default function WelcomeScreen() {
             const user = await AsyncStorage.getItem('user');
             if (user) {
                 const userData = JSON.parse(user);
-                if (userData.verification_status === 'VERIFIED') {
-                    router.replace('/(protected)/home');
+                const status = userData.verification_status;
+
+                if (status === 'VERIFIED') {
+                    router.replace('/home');
+                } else if (status === 'PENDING') {
+                    router.replace('/verification-pending');
                 } else {
-                    // User exists but not verified, show welcome screen
+                    // Stay on welcome screen for new/unverified/rejected users
                     setLoading(false);
                 }
             } else {

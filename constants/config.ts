@@ -1,13 +1,18 @@
 // Note: Expo uses EXPO_PUBLIC_ prefix for environment variables
 // that should be available in the client-side code
 
-// Use type assertion for Expo's process.env
+import { Platform } from 'react-native';
+
 const getEnvVar = (key: string, defaultValue: string): string => {
-    const value = (process.env as any)[key];
+    // @ts-ignore
+    const value = process.env[key];
     return value || defaultValue;
 };
 
-export const API_BASE_URL = getEnvVar('EXPO_PUBLIC_API_BASE_URL', 'http://localhost:8000');
+// Android emulator requires 10.0.2.2 to access localhost
+const LOCALHOST = Platform.OS === 'android' ? 'http://10.0.2.2:8000' : 'http://localhost:8000';
+
+export const API_BASE_URL = getEnvVar('EXPO_PUBLIC_API_BASE_URL', LOCALHOST);
 
 export const API_ENDPOINTS = {
     PING: '/ping',
