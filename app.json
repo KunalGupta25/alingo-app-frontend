@@ -17,7 +17,9 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSCameraUsageDescription": "This app needs access to the camera to capture your face for identity verification.",
-        "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to upload identity documents."
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to upload identity documents.",
+        "NSLocationWhenInUseUsageDescription": "Alingo needs your location to show it on the map and help match you with nearby riders.",
+        "NSLocationAlwaysUsageDescription": "Alingo needs your location to show it on the map and help match you with nearby riders."
       }
     },
     "android": {
@@ -31,7 +33,9 @@
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
       ]
     },
     "web": {
