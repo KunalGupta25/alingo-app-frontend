@@ -111,7 +111,13 @@ export default function FindBuddyScreen() {
             let userLng = 0, userLat = 0;
 
             if (status === 'granted') {
-                const pos = await Location.getLastKnownPositionAsync({});
+                let pos = await Location.getLastKnownPositionAsync({});
+                if (!pos) {
+                    pos = await Promise.race([
+                        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low }),
+                        new Promise<null>(r => setTimeout(() => r(null), 10000)),
+                    ]) as any;
+                }
                 if (pos) {
                     userLat = pos.coords.latitude;
                     userLng = pos.coords.longitude;
