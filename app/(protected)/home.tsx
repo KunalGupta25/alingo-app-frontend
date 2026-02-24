@@ -352,8 +352,11 @@ export default function HomeScreen() {
                             <Text style={[s.navIcon, activeTab === 'home' && s.navIconActive]}>⌂</Text>
                         </View>
                     </TouchableOpacity>
-                    <TouchableOpacity style={s.navItem} onPress={() => setActiveTab('chat')}>
-                        <Text style={[s.navIconRaw, activeTab === 'chat' && s.navIconActiveRaw]}>💬</Text>
+                    <TouchableOpacity style={s.navItem} onPress={() => router.push('/create-ride')}>
+                        <Text style={s.navIconRaw}>🚗</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={s.navItem} onPress={() => router.push('/find-buddy')}>
+                        <Text style={s.navIconRaw}>💬</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={s.navItem} onPress={() => setActiveTab('profile')}>
                         <Text style={[s.navIconRaw, activeTab === 'profile' && s.navIconActiveRaw]}>👤</Text>
