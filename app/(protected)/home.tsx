@@ -17,6 +17,7 @@ import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { userService } from '../../services/userService';
+import { rideService } from '../../services/rideService';
 
 // ── Palette ───────────────────────────────────────────────
 const C = {
@@ -73,14 +74,63 @@ export default function HomeScreen() {
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Nav
+    // Nav
     const [activeTab, setActiveTab] = useState<'home' | 'chat' | 'profile'>('home');
+
+    // Active ride (for Complete Ride button)
+    const [activeRide, setActiveRide] = useState<{
+        ride_id: string;
+        destination_name: string;
+        ride_time: string;
+        participants: Array<{ user_id: string; name: string; status: string }>;
+        completion_votes: number;
+        majority_needed: number;
+    } | null>(null);
+    const [completing, setCompleting] = useState(false);
 
     // Bottom sheet
     const sheetH = useRef(new Animated.Value(SHEET_MIN)).current;
     const lastH = useRef(SHEET_MIN);
 
     // ── Init ───────────────────────────────────────────────
-    useEffect(() => { requestLocation(); }, []);
+    useEffect(() => { requestLocation(); fetchMyActiveRide(); }, []);
+
+    const fetchMyActiveRide = async () => {
+        try {
+            const data = await rideService.getMyActiveRide();
+            setActiveRide(data.ride);
+        } catch { /* ignore — user may not have a ride */ }
+    };
+
+    const handleCompleteRide = async () => {
+        if (!activeRide) return;
+        setCompleting(true);
+        try {
+            const res = await rideService.completeRide(activeRide.ride_id);
+            if (res.status === 'COMPLETED') {
+                setActiveRide(null);
+                // Build list of approved participants to review
+                const reviewees = activeRide.participants
+                    .filter(p => p.status === 'APPROVED')
+                    .map(p => ({ user_id: p.user_id, name: p.name }));
+                router.push({
+                    pathname: '/review',
+                    params: {
+                        ride_id: activeRide.ride_id,
+                        participants: JSON.stringify(reviewees),
+                    },
+                });
+            } else {
+                // Vote recorded, not yet majority
+                fetchMyActiveRide();
+            }
+        } catch (e: any) {
+            const msg = e?.response?.data?.error ?? 'Failed to complete ride.';
+            import('react-native').then(({ Alert }) => Alert.alert('Error', msg));
+        } finally {
+            setCompleting(false);
+        }
+    };
 
     const requestLocation = async () => {
         try {
@@ -345,6 +395,32 @@ export default function HomeScreen() {
 
                 <View style={{ flex: 1 }} />
 
+                {/* ── Complete Ride banner ────────────────────── */}
+                {activeRide && (
+                    <View style={s.completeRideBanner}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={s.completeRideTitle}>🚗 Your Active Ride</Text>
+                            <Text style={s.completeRideSub} numberOfLines={1}>
+                                → {activeRide.destination_name}  ·  {activeRide.ride_time}
+                            </Text>
+                            <Text style={s.completeRideVotes}>
+                                {activeRide.completion_votes}/{activeRide.majority_needed} votes to complete
+                            </Text>
+                        </View>
+                        <TouchableOpacity
+                            style={[s.completeRideBtn, completing && { opacity: 0.6 }]}
+                            onPress={handleCompleteRide}
+                            disabled={completing}
+                            activeOpacity={0.8}
+                        >
+                            {completing
+                                ? <ActivityIndicator size="small" color="#fff" />
+                                : <Text style={s.completeRideBtnText}>Complete</Text>
+                            }
+                        </TouchableOpacity>
+                    </View>
+                )}
+
                 {/* Bottom nav bar */}
                 <View style={s.navBar}>
                     <TouchableOpacity style={s.navItem} onPress={() => setActiveTab('home')}>
@@ -467,4 +543,20 @@ const s = StyleSheet.create({
     navIconActive: { color: '#FFFFFF' },
     navIconRaw: { fontSize: 22, opacity: 0.4 },
     navIconActiveRaw: { opacity: 1 },
+
+    // ── Complete Ride banner ──────────────────────────────
+    completeRideBanner: {
+        flexDirection: 'row', alignItems: 'center',
+        backgroundColor: '#0B2B26',
+        borderTopWidth: 1, borderTopColor: 'rgba(142,182,155,0.2)',
+        paddingHorizontal: 16, paddingVertical: 12, gap: 12,
+    },
+    completeRideTitle: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
+    completeRideSub: { color: 'rgba(255,255,255,0.6)', fontSize: 12, marginTop: 2 },
+    completeRideVotes: { color: '#8EB69B', fontSize: 11, marginTop: 2 },
+    completeRideBtn: {
+        backgroundColor: '#8EB69B', borderRadius: 10,
+        paddingHorizontal: 16, paddingVertical: 10, alignItems: 'center',
+    },
+    completeRideBtnText: { color: '#051F20', fontSize: 13, fontWeight: '700' },
 });

@@ -74,6 +74,28 @@ export const rideService = {
         const response = await api.post('/rides/respond', { ride_id, user_id, action }, { headers });
         return response.data as { message: string };
     },
+
+    completeRide: async (ride_id: string) => {
+        const headers = await getAuthHeader();
+        const response = await api.post('/rides/complete', { ride_id }, { headers });
+        return response.data as { message: string; status?: string; votes?: number; needed?: number };
+    },
+
+    getMyActiveRide: async () => {
+        const headers = await getAuthHeader();
+        const response = await api.get('/rides/my-active', { headers });
+        return response.data as {
+            ride: null | {
+                ride_id: string;
+                ride_time: string;
+                destination_name: string;
+                max_seats: number;
+                participants: Array<{ user_id: string; name: string; status: string }>;
+                completion_votes: number;
+                majority_needed: number;
+            };
+        };
+    },
 };
 
 

@@ -10,6 +10,7 @@ export default function RootLayout() {
             <Stack.Screen name="(protected)/home" />
             <Stack.Screen name="(protected)/create-ride" />
             <Stack.Screen name="(protected)/find-buddy" />
+            <Stack.Screen name="(protected)/review" />
             <Stack.Screen name="(protected)/identity-verification" />
             <Stack.Screen name="(protected)/verification-pending" />
         </Stack>
