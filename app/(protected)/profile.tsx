@@ -12,7 +12,7 @@ import {
     View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../../context/AuthContext';
 import { profileService, MyProfile, RideHistoryItem } from '../../services/profileService';
 
 // ── Palette ───────────────────────────────────────────────
@@ -71,6 +71,7 @@ const RideRow = ({ item }: { item: RideHistoryItem }) => (
 // ── Screen ────────────────────────────────────────────────
 export default function ProfileScreen() {
     const router = useRouter();
+    const { signOut } = useAuth();
 
     const [profile, setProfile] = useState<MyProfile | null>(null);
     const [rides, setRides] = useState<{ created: RideHistoryItem[]; joined: RideHistoryItem[] } | null>(null);
@@ -124,8 +125,7 @@ export default function ProfileScreen() {
                 {
                     text: 'Log Out', style: 'destructive',
                     onPress: async () => {
-                        await AsyncStorage.multiRemove(['userToken', 'userId', 'user']);
-                        router.replace('/');
+                        await signOut();
                     },
                 },
             ],

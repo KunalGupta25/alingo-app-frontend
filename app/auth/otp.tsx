@@ -7,9 +7,11 @@ import { authService } from '../../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import CustomAlert from '../../components/CustomAlert';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import { useAuth } from '../../context/AuthContext';
 
 export default function OTPScreen() {
     const router = useRouter();
+    const { signIn } = useAuth();
     const params = useLocalSearchParams();
     const { phone, type } = params;
 
@@ -88,19 +90,10 @@ export default function OTPScreen() {
             console.log('Verification successful:', response);
 
             if (response.token) {
-                await AsyncStorage.setItem('userToken', response.token);
-                await AsyncStorage.setItem('user', JSON.stringify(response));
+                await signIn(response, response.token);
             }
 
-            showAlert('success', 'Success', 'Phone number verified successfully!', () => {
-                if (response.verification_status === 'VERIFIED') {
-                    router.replace('/home');
-                } else {
-                    // All other statuses (PENDING, UNVERIFIED, REJECTED) go to verification-pending
-                    // which will handle further redirection if needed
-                    router.replace('/verification-pending');
-                }
-            });
+            showAlert('success', 'Success', 'Phone number verified successfully!');
 
         } catch (error: any) {
             console.error('Error verifying OTP:', error);

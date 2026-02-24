@@ -5,13 +5,14 @@ import * as ImagePicker from 'expo-image-picker';
 import { Picker } from '@react-native-picker/picker';
 import { useRouter } from 'expo-router';
 import { verificationService } from '../../services/api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../../context/AuthContext';
 import ScreenWrapper from '../../components/ScreenWrapper';
 import CustomAlert from '../../components/CustomAlert';
 import { COLORS, SPACING, BORDER_RADIUS } from '../../constants/theme';
 
 export default function IdentityVerificationScreen() {
     const router = useRouter();
+    const { user, signOut } = useAuth();
     const cameraRef = useRef<CameraView>(null);
     const [documentType, setDocumentType] = useState('');
     const [documentImage, setDocumentImage] = useState<ImagePicker.ImagePickerAsset | null>(null);
@@ -76,8 +77,7 @@ export default function IdentityVerificationScreen() {
 
     const handleLogout = async () => {
         try {
-            await AsyncStorage.clear();
-            router.replace('/');
+            await signOut();
         } catch (error) {
             console.error('Logout error:', error);
         }
@@ -91,10 +91,10 @@ export default function IdentityVerificationScreen() {
 
         setLoading(true);
         try {
-            const token = await AsyncStorage.getItem('userToken');
+            const token = user?.token;
             if (!token) {
                 showAlert('error', 'Session Expired', 'Please login again', () => {
-                    router.replace('/auth/login');
+                    signOut();
                 });
                 return;
             }

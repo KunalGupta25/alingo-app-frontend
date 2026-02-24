@@ -1,55 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS } from '../constants/theme';
 
 const { width, height } = Dimensions.get('window');
 
 export default function WelcomeScreen() {
     const router = useRouter();
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        checkAuthStatus();
-    }, []);
-
-    const checkAuthStatus = async () => {
-        try {
-            const user = await AsyncStorage.getItem('user');
-            if (user) {
-                const userData = JSON.parse(user);
-                const status = userData.verification_status;
-
-                if (status === 'VERIFIED') {
-                    router.replace('/home');
-                } else if (status === 'PENDING') {
-                    router.replace('/verification-pending');
-                } else {
-                    // Stay on welcome screen for new/unverified/rejected users
-                    setLoading(false);
-                }
-            } else {
-                setLoading(false);
-            }
-        } catch (error) {
-            console.error('Error checking auth:', error);
-            setLoading(false);
-        }
-    };
-
-    if (loading) {
-        return (
-            <View style={styles.container}>
-                <LinearGradient
-                    colors={[COLORS.primaryDark, COLORS.dark, COLORS.mediumDark]}
-                    style={StyleSheet.absoluteFillObject}
-                />
-                <Text style={styles.logo}>ALINGO.</Text>
-            </View>
-        );
-    }
 
     return (
         <View style={styles.container}>
