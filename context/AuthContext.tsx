@@ -59,7 +59,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
             await AsyncStorage.multiRemove(['userToken', 'user', 'userId']);
             setUser(null);
-            router.replace('/');
+            router.replace('/auth/login');
         } catch (e) {
             console.error('Failed to sign out', e);
         }
@@ -87,7 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!user) {
             // Unauthenticated: Can only access root or auth group
             if (inProtectedGroup) {
-                router.replace('/');
+                router.replace('/auth/login');
             }
         } else {
             // Authenticated: Strict routing based on state
