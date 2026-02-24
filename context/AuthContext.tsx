@@ -10,6 +10,7 @@ export type UserData = {
     profileComplete?: boolean;
     verification_status: UserStatus;
     token?: string;
+    full_name?: string;
 };
 
 type AuthContextType = {

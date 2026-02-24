@@ -16,6 +16,7 @@ import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
+import { useAuth } from '../../context/AuthContext';
 import { userService } from '../../services/userService';
 import { rideService } from '../../services/rideService';
 
@@ -58,6 +59,7 @@ const KM30_LON = 0.32;
 // ── Component ─────────────────────────────────────────────
 export default function HomeScreen() {
     const router = useRouter();
+    const { user } = useAuth();
 
     // Location
     const [userCoords, setUserCoords] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -309,8 +311,11 @@ export default function HomeScreen() {
                 )}
             </MapView>
 
-            {/* ── Location pill ──────────────────────────── */}
-            <View style={s.pillWrap} pointerEvents="box-none">
+            {/* ── Header Area ──────────────────────────── */}
+            <View style={s.headerWrap} pointerEvents="box-none">
+                <Text style={s.greetingText}>
+                    Hello {user?.full_name?.split(' ')[0] || 'Rider'}! 🚗
+                </Text>
                 <View style={s.pill}>
                     <View style={s.pillDot} />
                     <Text style={s.pillText} numberOfLines={1}>{locationLabel}</Text>
@@ -463,10 +468,19 @@ const darkGreenStyle = [
 const s = StyleSheet.create({
     root: { flex: 1, backgroundColor: '#0B2B26' },
 
-    pillWrap: {
+    headerWrap: {
         position: 'absolute',
         top: Platform.OS === 'android' ? 44 : 60,
         left: 20, right: 20,
+        gap: 12,
+    },
+    greetingText: {
+        fontSize: 28,
+        fontWeight: '800',
+        color: '#FFFFFF',
+        textShadowColor: 'rgba(5, 31, 32, 0.5)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 4,
     },
     pill: {
         flexDirection: 'row',
