@@ -34,15 +34,12 @@ const C = {
     modalBg: '#0B2B26',
 };
 
-// ── Helpers to generate year/month/day/hour/minute arrays ─
-const range = (start: number, end: number) =>
-    Array.from({ length: end - start + 1 }, (_, i) => start + i);
-
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const YEARS = range(new Date().getFullYear(), new Date().getFullYear() + 2);
-const DAYS = range(1, 31);
-const HOURS = range(0, 23);
+// ── Time picker helpers ───────────────────────────────────
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const MINS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+
+// Today's date as YYYY-MM-DD (used automatically)
+const todayStr = () => new Date().toISOString().split('T')[0];
 
 // ──────────────────────────────────────────────────────────
 export default function CreateRideScreen() {
@@ -57,14 +54,6 @@ export default function CreateRideScreen() {
     const [searching, setSearching] = useState(false);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // Date state
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const [selYear, setSelYear] = useState(tomorrow.getFullYear());
-    const [selMonth, setSelMonth] = useState(tomorrow.getMonth());    // 0-indexed
-    const [selDay, setSelDay] = useState(tomorrow.getDate());
-    const [dateSet, setDateSet] = useState(false);
-    const [showDateModal, setShowDateModal] = useState(false);
 
     // Time state
     const [selHour, setSelHour] = useState(8);
@@ -106,15 +95,12 @@ export default function CreateRideScreen() {
     };
 
     // ── Formatted labels ──────────────────────────────────
-    const dateLabel = dateSet
-        ? `${selDay} ${MONTHS[selMonth]} ${selYear}`
-        : 'Select date';
     const timeLabel = timeSet
         ? `${String(selHour).padStart(2, '0')}:${String(selMin).padStart(2, '0')}`
         : 'Select time';
 
-    // ── Confirm ───────────────────────────────────────────
-    const isValid = !!destination && dateSet && timeSet && seats >= 1;
+    // ── Confirm (date is always today) ────────────────────
+    const isValid = !!destination && timeSet && seats >= 1;
 
     const handleConfirm = async () => {
         if (!isValid || !destination) return;
@@ -134,7 +120,7 @@ export default function CreateRideScreen() {
 
             const result = await rideService.createRide({
                 destination,
-                ride_date: `${selYear}-${String(selMonth + 1).padStart(2, '0')}-${String(selDay).padStart(2, '0')}`,
+                ride_date: todayStr(),
                 ride_time: `${String(selHour).padStart(2, '0')}:${String(selMin).padStart(2, '0')}`,
                 max_seats: seats,
                 route_polyline: polyline,
@@ -215,14 +201,6 @@ export default function CreateRideScreen() {
                 )}
             </View>
 
-            {/* ── Date picker ─────────────────────────────── */}
-            <View style={s.section}>
-                <Text style={s.label}>📅  Ride Date</Text>
-                <TouchableOpacity style={s.pickerBtn} onPress={() => setShowDateModal(true)}>
-                    <Text style={[s.pickerBtnText, !dateSet && s.muted]}>{dateLabel}</Text>
-                    <Text style={s.chevron}>›</Text>
-                </TouchableOpacity>
-            </View>
 
             {/* ── Time picker ─────────────────────────────── */}
             <View style={s.section}>
@@ -270,57 +248,9 @@ export default function CreateRideScreen() {
             </TouchableOpacity>
 
             {!isValid && (
-                <Text style={s.hint}>Fill in destination, date, and time to continue</Text>
+                <Text style={s.hint}>Choose destination and departure time to continue</Text>
             )}
 
-            {/* ── Date Modal ──────────────────────────────── */}
-            <Modal visible={showDateModal} transparent animationType="slide">
-                <View style={s.modalOverlay}>
-                    <View style={s.modalCard}>
-                        <Text style={s.modalTitle}>Select Date</Text>
-
-                        <View style={s.pickerRow}>
-                            {/* Day */}
-                            <View style={s.pickerCol}>
-                                <Text style={s.colLabel}>Day</Text>
-                                <ScrollView style={s.colScroll} showsVerticalScrollIndicator={false}>
-                                    {DAYS.map(d => (
-                                        <TouchableOpacity key={d} style={[s.colItem, selDay === d && s.colItemSel]} onPress={() => setSelDay(d)}>
-                                            <Text style={[s.colItemText, selDay === d && s.colItemTextSel]}>{d}</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            </View>
-                            {/* Month */}
-                            <View style={s.pickerCol}>
-                                <Text style={s.colLabel}>Month</Text>
-                                <ScrollView style={s.colScroll} showsVerticalScrollIndicator={false}>
-                                    {MONTHS.map((m, i) => (
-                                        <TouchableOpacity key={m} style={[s.colItem, selMonth === i && s.colItemSel]} onPress={() => setSelMonth(i)}>
-                                            <Text style={[s.colItemText, selMonth === i && s.colItemTextSel]}>{m}</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            </View>
-                            {/* Year */}
-                            <View style={s.pickerCol}>
-                                <Text style={s.colLabel}>Year</Text>
-                                <ScrollView style={s.colScroll} showsVerticalScrollIndicator={false}>
-                                    {YEARS.map(y => (
-                                        <TouchableOpacity key={y} style={[s.colItem, selYear === y && s.colItemSel]} onPress={() => setSelYear(y)}>
-                                            <Text style={[s.colItemText, selYear === y && s.colItemTextSel]}>{y}</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            </View>
-                        </View>
-
-                        <TouchableOpacity style={s.modalConfirmBtn} onPress={() => { setDateSet(true); setShowDateModal(false); }}>
-                            <Text style={s.modalConfirmText}>Set Date</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
 
             {/* ── Time Modal ──────────────────────────────── */}
             <Modal visible={showTimeModal} transparent animationType="slide">

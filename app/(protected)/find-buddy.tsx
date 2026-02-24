@@ -2,7 +2,6 @@ import React, { useCallback, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    FlatList,
     Modal,
     Platform,
     ScrollView,
@@ -35,10 +34,8 @@ const C = {
     modalBg: '#0B2B26',
 };
 
-// ── Date helpers ──────────────────────────────────────────
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const YEARS = Array.from({ length: 3 }, (_, i) => new Date().getFullYear() + i);
-const DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
+// Today's date as YYYY-MM-DD (rides are always for today)
+const todayStr = () => new Date().toISOString().split('T')[0];
 
 export default function FindBuddyScreen() {
     const router = useRouter();
@@ -52,25 +49,9 @@ export default function FindBuddyScreen() {
     const [searching, setSearching] = useState(false);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // Date picker
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const [selYear, setSelYear] = useState(tomorrow.getFullYear());
-    const [selMonth, setSelMonth] = useState(tomorrow.getMonth());
-    const [selDay, setSelDay] = useState(tomorrow.getDate());
-    const [dateSet, setDateSet] = useState(false);
-    const [showDateModal, setShowDateModal] = useState(false);
-
     // Search results
     const [results, setResults] = useState<any[] | null>(null);
     const [loading, setLoading] = useState(false);
-
-    const dateLabel = dateSet
-        ? `${selDay} ${MONTHS[selMonth]} ${selYear}`
-        : 'Select date';
-
-    const toDateStr = () =>
-        `${selYear}-${String(selMonth + 1).padStart(2, '0')}-${String(selDay).padStart(2, '0')}`;
 
     // ── Nominatim destination search ──────────────────────
     const searchDestination = useCallback(async (text: string) => {
@@ -104,7 +85,7 @@ export default function FindBuddyScreen() {
     };
 
     // ── Search handler ────────────────────────────────────
-    const isReady = !!destination && dateSet;
+    const isReady = !!destination;
 
     const handleSearch = async () => {
         if (!isReady || !destination) return;
@@ -134,7 +115,7 @@ export default function FindBuddyScreen() {
 
             const matches = await rideService.searchRides({
                 user_location: [userLng, userLat],
-                ride_date: toDateStr(),
+                ride_date: todayStr(),
                 route_polyline: polyline,
             });
 
@@ -213,14 +194,6 @@ export default function FindBuddyScreen() {
                     )}
                 </View>
 
-                {/* ── Date picker ─────────────────────────── */}
-                <View style={s.section}>
-                    <Text style={s.label}>📅  Ride Date</Text>
-                    <TouchableOpacity style={s.pickerBtn} onPress={() => setShowDateModal(true)}>
-                        <Text style={[s.pickerBtnText, !dateSet && s.muted]}>{dateLabel}</Text>
-                        <Text style={s.chevron}>›</Text>
-                    </TouchableOpacity>
-                </View>
 
                 {/* ── Search button ────────────────────────── */}
                 <TouchableOpacity
@@ -309,49 +282,7 @@ export default function FindBuddyScreen() {
                 <View style={{ height: 40 }} />
             </ScrollView>
 
-            {/* ── Date Modal ──────────────────────────────── */}
-            <Modal visible={showDateModal} transparent animationType="slide">
-                <View style={s.modalOverlay}>
-                    <View style={s.modalCard}>
-                        <Text style={s.modalTitle}>Select Date</Text>
-                        <View style={s.pickerRow}>
-                            <View style={s.pickerCol}>
-                                <Text style={s.colLabel}>Day</Text>
-                                <ScrollView style={s.colScroll} showsVerticalScrollIndicator={false}>
-                                    {DAYS.map(d => (
-                                        <TouchableOpacity key={d} style={[s.colItem, selDay === d && s.colItemSel]} onPress={() => setSelDay(d)}>
-                                            <Text style={[s.colItemText, selDay === d && s.colItemTextSel]}>{d}</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            </View>
-                            <View style={s.pickerCol}>
-                                <Text style={s.colLabel}>Month</Text>
-                                <ScrollView style={s.colScroll} showsVerticalScrollIndicator={false}>
-                                    {MONTHS.map((m, i) => (
-                                        <TouchableOpacity key={m} style={[s.colItem, selMonth === i && s.colItemSel]} onPress={() => setSelMonth(i)}>
-                                            <Text style={[s.colItemText, selMonth === i && s.colItemTextSel]}>{m}</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            </View>
-                            <View style={s.pickerCol}>
-                                <Text style={s.colLabel}>Year</Text>
-                                <ScrollView style={s.colScroll} showsVerticalScrollIndicator={false}>
-                                    {YEARS.map(y => (
-                                        <TouchableOpacity key={y} style={[s.colItem, selYear === y && s.colItemSel]} onPress={() => setSelYear(y)}>
-                                            <Text style={[s.colItemText, selYear === y && s.colItemTextSel]}>{y}</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            </View>
-                        </View>
-                        <TouchableOpacity style={s.modalConfirmBtn} onPress={() => { setDateSet(true); setShowDateModal(false); }}>
-                            <Text style={s.modalConfirmText}>Set Date</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
+
         </View>
     );
 }
