@@ -256,13 +256,17 @@ export default function FindBuddyScreen() {
                                             {item.creator_name?.[0]?.toUpperCase() ?? '?'}
                                         </Text>
                                     </View>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={s.creatorName}>{item.creator_name}</Text>
+                                    <TouchableOpacity
+                                        style={{ flex: 1 }}
+                                        onPress={() => item.creator_id && router.push({ pathname: '/public-profile', params: { user_id: item.creator_id } })}
+                                        activeOpacity={0.7}
+                                    >
+                                        <Text style={[s.creatorName, { textDecorationLine: 'underline' }]}>{item.creator_name}</Text>
                                         <Text style={[s.stars, { color: C.star }]}>
                                             {renderStars(item.creator_rating)}{' '}
                                             <Text style={s.ratingNum}>{item.creator_rating.toFixed(1)}</Text>
                                         </Text>
-                                    </View>
+                                    </TouchableOpacity>
                                     <View style={s.timeBadge}>
                                         <Text style={s.timeBadgeText}>{item.ride_time}</Text>
                                     </View>

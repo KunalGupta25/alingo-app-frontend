@@ -434,8 +434,8 @@ export default function HomeScreen() {
                     <TouchableOpacity style={s.navItem} onPress={() => router.push('/find-buddy')}>
                         <Text style={s.navIconRaw}>💬</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={s.navItem} onPress={() => setActiveTab('profile')}>
-                        <Text style={[s.navIconRaw, activeTab === 'profile' && s.navIconActiveRaw]}>👤</Text>
+                    <TouchableOpacity style={s.navItem} onPress={() => router.push('/profile')}>
+                        <Text style={s.navIconRaw}>👤</Text>
                     </TouchableOpacity>
                 </View>
             </Animated.View>

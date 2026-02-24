@@ -54,6 +54,7 @@ export const rideService = {
         const response = await api.post('/rides/search', payload, { headers });
         return response.data as Array<{
             ride_id: string;
+            creator_id: string;
             creator_name: string;
             creator_rating: number;
             distance_meters: number;
