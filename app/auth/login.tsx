@@ -31,7 +31,7 @@ export default function LoginScreen() {
 
     const handleSendOTP = async () => {
         Keyboard.dismiss();
-        
+
         if (!phone || phone.length < 10) {
             showAlert('error', 'Invalid Phone Number', 'Please enter a valid phone number');
             return;
@@ -46,7 +46,7 @@ export default function LoginScreen() {
 
         setLoading(true);
         try {
-            const response = await authService.sendOTP(formattedPhone);
+            const response = await authService.sendOTP(formattedPhone, 'login');
 
             console.log('OTP sent:', response.otp);
             showAlert(

@@ -106,7 +106,7 @@ export default function SignupScreen() {
                 bio: formData.bio,
             }));
 
-            const response = await authService.sendOTP(formattedPhone);
+            const response = await authService.sendOTP(formattedPhone, 'signup');
 
             console.log('OTP sent:', response.otp);
             showAlert(

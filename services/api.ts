@@ -18,8 +18,8 @@ export const authService = {
         return response.data;
     },
 
-    sendOTP: async (phone: string) => {
-        const response = await api.post('/auth/otp/send', { phone });
+    sendOTP: async (phone: string, type: 'login' | 'signup' = 'login') => {
+        const response = await api.post('/auth/otp/send', { phone, type });
         return response.data;
     },
 
