@@ -124,7 +124,7 @@ export default function ProfileScreen() {
                 {
                     text: 'Log Out', style: 'destructive',
                     onPress: async () => {
-                        await AsyncStorage.multiRemove(['userToken', 'userId']);
+                        await AsyncStorage.multiRemove(['userToken', 'userId', 'user']);
                         router.replace('/');
                     },
                 },
