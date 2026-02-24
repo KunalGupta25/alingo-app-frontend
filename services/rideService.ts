@@ -46,8 +46,8 @@ export const rideService = {
     },
 
     searchRides: async (payload: {
-        user_location: [number, number];   // [lng, lat]
-        ride_date: string;             // 'YYYY-MM-DD'
+        user_location: [number, number];
+        ride_date: string;
         route_polyline: string;
     }) => {
         const headers = await getAuthHeader();
@@ -62,5 +62,18 @@ export const rideService = {
             destination_name: string;
         }>;
     },
+
+    requestRide: async (ride_id: string) => {
+        const headers = await getAuthHeader();
+        const response = await api.post('/rides/request', { ride_id }, { headers });
+        return response.data as { message: string };
+    },
+
+    respondRide: async (ride_id: string, user_id: string, action: 'APPROVE' | 'REJECT') => {
+        const headers = await getAuthHeader();
+        const response = await api.post('/rides/respond', { ride_id, user_id, action }, { headers });
+        return response.data as { message: string };
+    },
 };
+
 

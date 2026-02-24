@@ -53,6 +53,21 @@ export default function FindBuddyScreen() {
     const [results, setResults] = useState<any[] | null>(null);
     const [loading, setLoading] = useState(false);
 
+    // Per-ride join button state: 'idle' | 'loading' | 'PENDING' | 'APPROVED' | 'REJECTED'
+    const [requestStates, setRequestStates] = useState<Record<string, string>>({});
+
+    const handleRequestJoin = async (ride_id: string) => {
+        setRequestStates(prev => ({ ...prev, [ride_id]: 'loading' }));
+        try {
+            await rideService.requestRide(ride_id);
+            setRequestStates(prev => ({ ...prev, [ride_id]: 'PENDING' }));
+        } catch (err: any) {
+            const msg = err?.response?.data?.error ?? 'Could not send request.';
+            Alert.alert('Request failed', msg);
+            setRequestStates(prev => ({ ...prev, [ride_id]: 'idle' }));
+        }
+    };
+
     // ── Nominatim destination search ──────────────────────
     const searchDestination = useCallback(async (text: string) => {
         if (!text.trim()) { setSuggestions([]); return; }
@@ -274,6 +289,34 @@ export default function FindBuddyScreen() {
                                         </View>
                                     </View>
                                 </View>
+
+                                {/* ── Join Request Button ───────────────────── */}
+                                {(() => {
+                                    const rs = requestStates[item.ride_id] ?? 'idle';
+                                    const cfg: Record<string, { label: string; style: any; textStyle: any; disabled: boolean }> = {
+                                        idle: { label: '🚗 Request to Join', style: s.joinBtn, textStyle: s.joinBtnText, disabled: false },
+                                        loading: { label: '…', style: s.joinBtn, textStyle: s.joinBtnText, disabled: true },
+                                        PENDING: { label: '⏳ Pending', style: s.joinBtnPending, textStyle: s.joinBtnTextMuted, disabled: true },
+                                        APPROVED: { label: '✅ Joined', style: s.joinBtnApproved, textStyle: s.joinBtnTextApproved, disabled: true },
+                                        REJECTED: { label: '✗ Rejected', style: s.joinBtnRejected, textStyle: s.joinBtnTextRejected, disabled: true },
+                                    };
+                                    const { label, style, textStyle, disabled } = cfg[rs];
+                                    return (
+                                        <View style={s.joinBtnWrap}>
+                                            <TouchableOpacity
+                                                style={[s.joinBtnBase, style]}
+                                                onPress={() => handleRequestJoin(item.ride_id)}
+                                                disabled={disabled}
+                                                activeOpacity={0.8}
+                                            >
+                                                {rs === 'loading'
+                                                    ? <ActivityIndicator size="small" color={C.btnText} />
+                                                    : <Text style={[s.joinBtnBaseText, textStyle]}>{label}</Text>
+                                                }
+                                            </TouchableOpacity>
+                                        </View>
+                                    );
+                                })()}
                             </View>
                         ))}
                     </View>
@@ -402,4 +445,25 @@ const s = StyleSheet.create({
     colItemTextSel: { color: C.accent, fontWeight: '700' },
     modalConfirmBtn: { backgroundColor: C.btnBg, borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
     modalConfirmText: { color: C.btnText, fontSize: 16, fontWeight: '700' },
+
+    // ── Join button ──────────────────────────────────────
+    joinBtnWrap: { paddingHorizontal: 14, paddingBottom: 14 },
+    joinBtnBase: { borderRadius: 10, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' },
+    joinBtnBaseText: { fontSize: 14, fontWeight: '700' },
+
+    // idle / loading
+    joinBtn: { backgroundColor: C.btnBg },
+    joinBtnText: { color: C.btnText },
+
+    // PENDING
+    joinBtnPending: { backgroundColor: 'rgba(142,182,155,0.12)', borderWidth: 1, borderColor: C.cardBorder },
+    joinBtnTextMuted: { color: C.textMuted },
+
+    // APPROVED
+    joinBtnApproved: { backgroundColor: 'rgba(46,139,87,0.2)', borderWidth: 1, borderColor: '#2E8B57' },
+    joinBtnTextApproved: { color: '#4CAF82' },
+
+    // REJECTED
+    joinBtnRejected: { backgroundColor: 'rgba(180,60,60,0.15)', borderWidth: 1, borderColor: 'rgba(180,60,60,0.4)' },
+    joinBtnTextRejected: { color: '#E07070' },
 });
