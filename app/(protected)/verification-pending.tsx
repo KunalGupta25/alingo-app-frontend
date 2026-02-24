@@ -2,9 +2,10 @@ import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { verificationService } from '../../services/api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth, UserStatus } from '../../context/AuthContext';
 
 export default function VerificationPendingScreen() {
+    const { user, updateUser } = useAuth();
     useEffect(() => {
         checkStatus();
 
@@ -16,29 +17,30 @@ export default function VerificationPendingScreen() {
 
     const checkStatus = async () => {
         try {
-            const token = await AsyncStorage.getItem('userToken');
+            const token = user?.token;
 
             if (!token) {
-                router.replace('/auth/otp');
+                router.replace('/auth/login');
                 return;
             }
 
             const { verification_status, rejection_reason } = await verificationService.getStatus(token);
 
+            // Sync context if it changed
+            if (user.verification_status !== verification_status) {
+                await updateUser({ verification_status: verification_status as UserStatus });
+            }
+
             if (verification_status === 'VERIFIED') {
-                // User is verified, navigate to home
                 router.replace('/(protected)/home');
             } else if (verification_status === 'REJECTED') {
-                // User was rejected, navigate back to verification with error
                 router.replace({
                     pathname: '/(protected)/identity-verification',
                     params: { rejected: 'true', reason: rejection_reason },
                 });
             } else if (verification_status === 'UNVERIFIED') {
-                // User has not submitted verification yet
                 router.replace('/(protected)/identity-verification');
             }
-            // If PENDING, stay on this screen
         } catch (error) {
             console.error('Status check failed:', error);
         }
