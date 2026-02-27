@@ -77,11 +77,6 @@ export default function ProfileScreen() {
     const [rides, setRides] = useState<{ created: RideHistoryItem[]; joined: RideHistoryItem[] } | null>(null);
     const [loading, setLoading] = useState(true);
     const [tab, setTab] = useState<'created' | 'joined'>('created');
-    const [bio, setBio] = useState('');
-    const [available, setAvailable] = useState(false);
-    const [saving, setSaving] = useState(false);
-    const [bioChars, setBioChars] = useState(0);
-
     const load = useCallback(async () => {
         setLoading(true);
         try {
@@ -91,9 +86,6 @@ export default function ProfileScreen() {
             ]);
             setProfile(p);
             setRides(r);
-            setBio(p.bio ?? '');
-            setAvailable(p.available_for_ride ?? false);
-            setBioChars((p.bio ?? '').length);
         } catch {
             Alert.alert('Error', 'Could not load profile.');
         } finally {
@@ -102,19 +94,6 @@ export default function ProfileScreen() {
     }, []);
 
     useEffect(() => { load(); }, [load]);
-
-    const handleSave = async () => {
-        setSaving(true);
-        try {
-            await profileService.updateProfile({ bio, available_for_ride: available });
-            Alert.alert('Saved', 'Profile updated.');
-            load();
-        } catch (e: any) {
-            Alert.alert('Error', e?.response?.data?.error ?? 'Failed to save.');
-        } finally {
-            setSaving(false);
-        }
-    };
 
     const handleLogout = () => {
         Alert.alert(
@@ -163,7 +142,7 @@ export default function ProfileScreen() {
                 </View>
                 <View style={{ flex: 1, gap: 5 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <Text style={s.fullName}>{profile.full_name}</Text>
+                        <Text style={s.fullName}>{profile.full_name || 'Alingo User'}</Text>
                         {isVerified && (
                             <View style={s.verifiedBadge}>
                                 <Text style={s.verifiedText}>✅ Verified</Text>
@@ -225,51 +204,14 @@ export default function ProfileScreen() {
                 )}
             </View>
 
-            {/* ── Edit section ───────────────────────────── */}
-            <View style={s.section}>
-                <Text style={s.sectionTitle}>✏️  Edit Profile</Text>
-
-                <Text style={s.fieldLabel}>Bio</Text>
-                <View style={s.bioWrap}>
-                    <TextInput
-                        style={s.bioInput}
-                        value={bio}
-                        onChangeText={t => { setBio(t); setBioChars(t.length); }}
-                        placeholder="Tell riders about yourself…"
-                        placeholderTextColor={C.textMuted}
-                        multiline
-                        maxLength={150}
-                    />
-                    <Text style={[s.charCount, bioChars > 130 && { color: C.danger }]}>
-                        {bioChars}/150
-                    </Text>
-                </View>
-
-                <View style={s.availRow}>
-                    <View>
-                        <Text style={s.fieldLabel}>Available for Ride</Text>
-                        <Text style={s.fieldSub}>Let others see you're ready to ride today</Text>
-                    </View>
-                    <Switch
-                        value={available}
-                        onValueChange={setAvailable}
-                        trackColor={{ false: C.cardBorder as string, true: C.accent }}
-                        thumbColor={available ? '#fff' : C.textMuted as string}
-                    />
-                </View>
-
-                <TouchableOpacity
-                    style={[s.saveBtn, saving && { opacity: 0.6 }]}
-                    onPress={handleSave}
-                    disabled={saving}
-                    activeOpacity={0.8}
-                >
-                    {saving
-                        ? <ActivityIndicator color={C.btnText} />
-                        : <Text style={s.saveBtnText}>Save Changes</Text>
-                    }
-                </TouchableOpacity>
-            </View>
+            {/* ── Edit section (Button) ──────────────────────── */}
+            <TouchableOpacity
+                style={s.editProfileBtn}
+                onPress={() => router.push('/edit-profile')} // Navigation placeholder
+                activeOpacity={0.8}
+            >
+                <Text style={s.editProfileBtnText}>✏️ Edit Profile</Text>
+            </TouchableOpacity>
 
             {/* ── Logout ─────────────────────────────────── */}
             <TouchableOpacity style={s.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
@@ -348,16 +290,14 @@ const s = StyleSheet.create({
     divider: { height: 1, backgroundColor: C.divider },
     emptyText: { color: C.textMuted, fontSize: 14, textAlign: 'center', paddingVertical: 12 },
 
-    // Edit section
-    fieldLabel: { color: C.accent, fontSize: 12, fontWeight: '700', marginBottom: 4, letterSpacing: 0.4 },
-    fieldSub: { color: C.textMuted, fontSize: 12, marginTop: 2 },
-    bioWrap: { backgroundColor: C.inputBg, borderRadius: 12, padding: 12, gap: 6 },
-    bioInput: { color: C.text, fontSize: 14, minHeight: 72, textAlignVertical: 'top' },
-    charCount: { color: C.textMuted, fontSize: 11, textAlign: 'right' },
-    availRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-
-    saveBtn: { backgroundColor: C.btnBg, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-    saveBtnText: { color: C.btnText, fontSize: 15, fontWeight: '700' },
+    // Edit Profile Button
+    editProfileBtn: {
+        marginHorizontal: 20, marginBottom: 16,
+        backgroundColor: C.card, borderRadius: 16,
+        borderWidth: 1, borderColor: C.cardBorder,
+        paddingVertical: 18, alignItems: 'center',
+    },
+    editProfileBtnText: { color: C.text, fontSize: 16, fontWeight: '700' },
 
     // Logout
     logoutBtn: { marginHorizontal: 20, borderRadius: 12, borderWidth: 1, borderColor: C.danger, paddingVertical: 14, alignItems: 'center', marginTop: 4 },
