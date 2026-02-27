@@ -230,7 +230,7 @@ export default function FindBuddyScreen() {
                 </TouchableOpacity>
 
                 {isReady && !loading && (
-                    <Text style={s.hint}>Searching within 500m of your location</Text>
+                    <Text style={s.hint}>Searching within 2km of your location</Text>
                 )}
 
                 {/* ── Results ──────────────────────────────── */}
@@ -247,7 +247,7 @@ export default function FindBuddyScreen() {
                                 <Text style={s.emptyIcon}>🚗</Text>
                                 <Text style={s.emptyTitle}>No buddies yet!</Text>
                                 <Text style={s.emptyBody}>
-                                    No active rides within 500m for this date.{'\n'}
+                                    No active rides within 2km for this date.{'\n'}
                                     Be the first to create one!
                                 </Text>
                             </View>

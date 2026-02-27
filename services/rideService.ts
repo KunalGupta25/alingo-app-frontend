@@ -94,7 +94,24 @@ export const rideService = {
                 participants: Array<{ user_id: string; name: string; status: string }>;
                 completion_votes: number;
                 majority_needed: number;
+                is_creator: boolean;
+                creator_id: string;
             };
+        };
+    },
+
+    getMyRequests: async () => {
+        const headers = await getAuthHeader();
+        const response = await api.get('/rides/my-requests', { headers });
+        return response.data as {
+            requests: Array<{
+                ride_id: string;
+                ride_time: string;
+                destination_name: string;
+                creator_name: string;
+                creator_id: string;
+                my_status: 'PENDING' | 'APPROVED' | 'REJECTED';
+            }>;
         };
     },
 };

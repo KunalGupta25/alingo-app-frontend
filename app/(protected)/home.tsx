@@ -6,6 +6,7 @@ import {
     PanResponder,
     Platform,
     StyleSheet,
+    Switch,
     Text,
     TextInput,
     TouchableOpacity,
@@ -87,8 +88,27 @@ export default function HomeScreen() {
         participants: Array<{ user_id: string; name: string; status: string }>;
         completion_votes: number;
         majority_needed: number;
+        is_creator: boolean;
+        creator_id: string;
     } | null>(null);
     const [completing, setCompleting] = useState(false);
+    const [respondingTo, setRespondingTo] = useState<string | null>(null); // user_id being approved/rejected
+
+    // Availability toggle
+    const [available, setAvailable] = useState(false);
+    const [togglingAvail, setTogglingAvail] = useState(false);
+
+    const handleAvailToggle = async (val: boolean) => {
+        setTogglingAvail(true);
+        try {
+            await userService.updateAvailability(val);
+            setAvailable(val);
+        } catch {
+            /* silent — keep old value */
+        } finally {
+            setTogglingAvail(false);
+        }
+    };
 
     // Bottom sheet
     const sheetH = useRef(new Animated.Value(SHEET_MIN)).current;
@@ -100,7 +120,7 @@ export default function HomeScreen() {
     const fetchMyActiveRide = async () => {
         try {
             const data = await rideService.getMyActiveRide();
-            setActiveRide(data.ride);
+            setActiveRide(data.ride as any);
         } catch { /* ignore — user may not have a ride */ }
     };
 
@@ -111,9 +131,10 @@ export default function HomeScreen() {
             const res = await rideService.completeRide(activeRide.ride_id);
             if (res.status === 'COMPLETED') {
                 setActiveRide(null);
-                // Build list of approved participants to review
+                // Build list of approved participants to review (exclude self)
+                const myUserId = user?.user_id;
                 const reviewees = activeRide.participants
-                    .filter(p => p.status === 'APPROVED')
+                    .filter(p => p.status === 'APPROVED' && p.user_id !== myUserId)
                     .map(p => ({ user_id: p.user_id, name: p.name }));
                 router.push({
                     pathname: '/review',
@@ -131,6 +152,20 @@ export default function HomeScreen() {
             import('react-native').then(({ Alert }) => Alert.alert('Error', msg));
         } finally {
             setCompleting(false);
+        }
+    };
+
+    const handleRespond = async (targetUserId: string, action: 'APPROVE' | 'REJECT') => {
+        if (!activeRide) return;
+        setRespondingTo(targetUserId);
+        try {
+            await rideService.respondRide(activeRide.ride_id, targetUserId, action);
+            fetchMyActiveRide();
+        } catch (e: any) {
+            const msg = e?.response?.data?.error ?? 'Action failed.';
+            import('react-native').then(({ Alert }) => Alert.alert('Error', msg));
+        } finally {
+            setRespondingTo(null);
         }
     };
 
@@ -400,11 +435,59 @@ export default function HomeScreen() {
 
                 <View style={{ flex: 1 }} />
 
-                {/* ── Complete Ride banner ────────────────────── */}
+                {/* ── Availability Toggle ──────────────────────── */}
+                {!activeRide && (
+                    <View style={s.availRow}>
+                        <Text style={s.availLabel}>🟢 Available for rides</Text>
+                        <Switch
+                            value={available}
+                            onValueChange={handleAvailToggle}
+                            disabled={togglingAvail}
+                            trackColor={{ false: 'rgba(142,182,155,0.2)', true: '#8EB69B' }}
+                            thumbColor={available ? '#051F20' : '#8EB69B'}
+                        />
+                    </View>
+                )}
+
+                {/* ── Manage Requests (creator only) ──────────── */}
+                {activeRide?.is_creator && (() => {
+                    const pending = activeRide.participants.filter(p => p.status === 'PENDING');
+                    if (!pending.length) return null;
+                    return (
+                        <View style={s.managePanel}>
+                            <Text style={s.managePanelTitle}>🔔 Join Requests ({pending.length})</Text>
+                            {pending.map(p => (
+                                <View key={p.user_id} style={s.manageRow}>
+                                    <Text style={s.manageName} numberOfLines={1}>{p.name}</Text>
+                                    <TouchableOpacity
+                                        style={s.approveBtn}
+                                        onPress={() => handleRespond(p.user_id, 'APPROVE')}
+                                        disabled={respondingTo === p.user_id}
+                                    >
+                                        {respondingTo === p.user_id
+                                            ? <ActivityIndicator size="small" color="#051F20" />
+                                            : <Text style={s.approveBtnText}>✓ Approve</Text>}
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={s.rejectBtn}
+                                        onPress={() => handleRespond(p.user_id, 'REJECT')}
+                                        disabled={respondingTo === p.user_id}
+                                    >
+                                        <Text style={s.rejectBtnText}>✗</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ))}
+                        </View>
+                    );
+                })()}
+
+                {/* ── Active Ride Banner (creator OR joined) ───── */}
                 {activeRide && (
                     <View style={s.completeRideBanner}>
                         <View style={{ flex: 1 }}>
-                            <Text style={s.completeRideTitle}>🚗 Your Active Ride</Text>
+                            <Text style={s.completeRideTitle}>
+                                {activeRide.is_creator ? '🚗 Your Ride' : '🎟 Joined Ride'}
+                            </Text>
                             <Text style={s.completeRideSub} numberOfLines={1}>
                                 → {activeRide.destination_name}  ·  {activeRide.ride_time}
                             </Text>
@@ -573,4 +656,37 @@ const s = StyleSheet.create({
         paddingHorizontal: 16, paddingVertical: 10, alignItems: 'center',
     },
     completeRideBtnText: { color: '#051F20', fontSize: 13, fontWeight: '700' },
+
+    // ── Availability toggle ──────────────────────────
+    availRow: {
+        flexDirection: 'row', alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: 'rgba(22,56,50,0.7)',
+        paddingHorizontal: 16, paddingVertical: 10,
+        borderTopWidth: 1, borderTopColor: 'rgba(142,182,155,0.2)',
+    },
+    availLabel: { color: '#8EB69B', fontSize: 13, fontWeight: '600' },
+
+    // ── Manage requests panel ─────────────────────
+    managePanel: {
+        backgroundColor: '#0B2B26',
+        borderTopWidth: 1, borderTopColor: 'rgba(142,182,155,0.2)',
+        paddingHorizontal: 12, paddingVertical: 10, gap: 8,
+    },
+    managePanelTitle: { color: '#FFFFFF', fontSize: 12, fontWeight: '700', marginBottom: 4 },
+    manageRow: {
+        flexDirection: 'row', alignItems: 'center', gap: 8,
+    },
+    manageName: { color: 'rgba(255,255,255,0.8)', fontSize: 13, flex: 1 },
+    approveBtn: {
+        backgroundColor: '#8EB69B', borderRadius: 8,
+        paddingHorizontal: 12, paddingVertical: 6,
+    },
+    approveBtnText: { color: '#051F20', fontSize: 12, fontWeight: '700' },
+    rejectBtn: {
+        backgroundColor: 'rgba(180,60,60,0.2)', borderRadius: 8,
+        borderWidth: 1, borderColor: 'rgba(180,60,60,0.4)',
+        paddingHorizontal: 10, paddingVertical: 6,
+    },
+    rejectBtnText: { color: '#E07070', fontSize: 13, fontWeight: '700' },
 });
