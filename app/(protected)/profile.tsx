@@ -207,7 +207,7 @@ export default function ProfileScreen() {
             {/* ── Edit section (Button) ──────────────────────── */}
             <TouchableOpacity
                 style={s.editProfileBtn}
-                onPress={() => router.push('/edit-profile')} // Navigation placeholder
+                onPress={() => router.push('/(protected)/edit-profile')}
                 activeOpacity={0.8}
             >
                 <Text style={s.editProfileBtnText}>✏️ Edit Profile</Text>
