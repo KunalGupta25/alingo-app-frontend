@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
 import { verificationService } from '../../services/api';
 import { useAuth, UserStatus } from '../../context/AuthContext';
@@ -68,6 +68,17 @@ export default function VerificationPendingScreen() {
                     <ActivityIndicator size="large" color="#9eff00" />
                     <Text style={styles.loaderText}>Checking status...</Text>
                 </View>
+
+                {/* Navigation to verification screen */}
+                <View style={{ marginTop: 40, width: '100%' }}>
+                    <TouchableOpacity
+                        style={styles.verifyBtn}
+                        onPress={() => router.push('/(protected)/identity-verification')}
+                        activeOpacity={0.8}
+                    >
+                        <Text style={styles.verifyBtnText}>Go to Verification</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
         </View>
     );
@@ -125,5 +136,16 @@ const styles = StyleSheet.create({
         marginTop: 12,
         fontSize: 14,
         color: '#999',
+    },
+    verifyBtn: {
+        backgroundColor: '#051F20',
+        paddingVertical: 16,
+        borderRadius: 12,
+        alignItems: 'center',
+    },
+    verifyBtnText: {
+        color: '#ffffff',
+        fontSize: 16,
+        fontWeight: '600',
     },
 });
