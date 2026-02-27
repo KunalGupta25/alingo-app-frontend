@@ -41,6 +41,7 @@ const C = {
 };
 
 const { height: SCREEN_H } = Dimensions.get('window');
+const NAV_H = Platform.OS === 'ios' ? 84 : 68;   // navbar height (incl. safe area)
 const SHEET_MIN = SCREEN_H * 0.50;
 const SHEET_MAX = SCREEN_H * 0.80;
 
@@ -516,24 +517,25 @@ export default function HomeScreen() {
                     </View>
                 )}
 
-                {/* Bottom nav bar */}
-                <View style={s.navBar}>
-                    <TouchableOpacity style={s.navItem} onPress={() => setActiveTab('home')}>
-                        <View style={[s.navIconWrap, activeTab === 'home' && s.navIconWrapActive]}>
-                            <Text style={[s.navIcon, activeTab === 'home' && s.navIconActive]}>⌂</Text>
-                        </View>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={s.navItem} onPress={() => router.push('/create-ride')}>
-                        <Text style={s.navIconRaw}>🚗</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={s.navItem} onPress={() => router.push('/find-buddy')}>
-                        <Text style={s.navIconRaw}>💬</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={s.navItem} onPress={() => router.push('/profile')}>
-                        <Text style={s.navIconRaw}>👤</Text>
-                    </TouchableOpacity>
-                </View>
             </Animated.View>
+
+            {/* ── Bottom nav bar (always visible, outside the sheet) ─── */}
+            <View style={s.navBar}>
+                <TouchableOpacity style={s.navItem} onPress={() => setActiveTab('home')}>
+                    <View style={[s.navIconWrap, activeTab === 'home' && s.navIconWrapActive]}>
+                        <Text style={[s.navIcon, activeTab === 'home' && s.navIconActive]}>⌂</Text>
+                    </View>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.navItem} onPress={() => router.push('/create-ride')}>
+                    <Text style={s.navIconRaw}>🚗</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.navItem} onPress={() => router.push('/find-buddy')}>
+                    <Text style={s.navIconRaw}>💬</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.navItem} onPress={() => router.push('/profile')}>
+                    <Text style={s.navIconRaw}>👤</Text>
+                </TouchableOpacity>
+            </View>
         </View>
     );
 }
@@ -585,7 +587,7 @@ const s = StyleSheet.create({
     pillText: { color: C.pillText, fontSize: 15, fontWeight: '500', flex: 1 },
 
     sheet: {
-        position: 'absolute', bottom: 0, left: 0, right: 0,
+        position: 'absolute', bottom: NAV_H, left: 0, right: 0,
         backgroundColor: C.sheetBg,
         borderTopLeftRadius: 20,
         borderTopRightRadius: 20,
@@ -630,6 +632,10 @@ const s = StyleSheet.create({
     emptyText: { color: 'rgba(22,56,50,0.5)', fontSize: 14 },
 
     navBar: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-around',
