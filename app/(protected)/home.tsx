@@ -373,75 +373,79 @@ export default function HomeScreen() {
                     <View style={s.handle} />
                 </View>
 
-                {/* Search bar */}
-                <View style={s.searchBar}>
-                    <Text style={s.searchIcon}>🔍</Text>
-                    <TextInput
-                        style={s.searchInput}
-                        placeholder="Where are you going?"
-                        placeholderTextColor={C.searchPlaceholder}
-                        value={query}
-                        onChangeText={handleQueryChange}
-                        returnKeyType="search"
-                        clearButtonMode="while-editing"
-                        autoCorrect={false}
-                    />
-                    {searching && (
-                        <ActivityIndicator size="small" color={C.searchText} />
-                    )}
-                    {query.length > 0 && !searching && (
-                        <TouchableOpacity onPress={() => { setQuery(''); setSuggestions([]); }}>
-                            <Text style={s.clearBtn}>✕</Text>
-                        </TouchableOpacity>
-                    )}
-                </View>
+                {!activeRide && (
+                    <>
+                        {/* Search bar */}
+                        <View style={s.searchBar}>
+                            <Text style={s.searchIcon}>🔍</Text>
+                            <TextInput
+                                style={s.searchInput}
+                                placeholder="Where are you going?"
+                                placeholderTextColor={C.searchPlaceholder}
+                                value={query}
+                                onChangeText={handleQueryChange}
+                                returnKeyType="search"
+                                clearButtonMode="while-editing"
+                                autoCorrect={false}
+                            />
+                            {searching && (
+                                <ActivityIndicator size="small" color={C.searchText} />
+                            )}
+                            {query.length > 0 && !searching && (
+                                <TouchableOpacity onPress={() => { setQuery(''); setSuggestions([]); }}>
+                                    <Text style={s.clearBtn}>✕</Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
 
-                {/* Dynamic suggestions OR static recents */}
-                {suggestions.length > 0 ? (
-                    <FlatList
-                        data={suggestions}
-                        keyExtractor={item => item.place_id?.toString() ?? item.display_name}
-                        style={s.list}
-                        keyboardShouldPersistTaps="handled"
-                        renderItem={({ item, index }) => (
-                            <TouchableOpacity
-                                style={[s.destRow, index < suggestions.length - 1 && s.destDivider]}
-                                onPress={() => handleSelectSuggestion(item)}
-                                activeOpacity={0.6}
-                            >
-                                <Text style={s.pinIcon}>📍</Text>
-                                <View style={s.destInfo}>
-                                    <Text style={s.destName} numberOfLines={1}>
-                                        {item.display_name.split(',')[0]}
-                                    </Text>
-                                    <Text style={s.destSub} numberOfLines={1}>
-                                        {item.display_name.split(',').slice(1, 3).join(',')}
-                                    </Text>
-                                </View>
-                            </TouchableOpacity>
+                        {/* Dynamic suggestions OR static recents */}
+                        {suggestions.length > 0 ? (
+                            <FlatList
+                                data={suggestions}
+                                keyExtractor={item => item.place_id?.toString() ?? item.display_name}
+                                style={s.list}
+                                keyboardShouldPersistTaps="handled"
+                                renderItem={({ item, index }) => (
+                                    <TouchableOpacity
+                                        style={[s.destRow, index < suggestions.length - 1 && s.destDivider]}
+                                        onPress={() => handleSelectSuggestion(item)}
+                                        activeOpacity={0.6}
+                                    >
+                                        <Text style={s.pinIcon}>📍</Text>
+                                        <View style={s.destInfo}>
+                                            <Text style={s.destName} numberOfLines={1}>
+                                                {item.display_name.split(',')[0]}
+                                            </Text>
+                                            <Text style={s.destSub} numberOfLines={1}>
+                                                {item.display_name.split(',').slice(1, 3).join(',')}
+                                            </Text>
+                                        </View>
+                                    </TouchableOpacity>
+                                )}
+                            />
+                        ) : query.length > 0 && !searching ? (
+                            <View style={s.emptyWrap}>
+                                <Text style={s.emptyText}>No places found within 30 km</Text>
+                            </View>
+                        ) : (
+                            // Static recents when search is empty
+                            <View style={s.list}>
+                                {RECENTS.map((d, i) => (
+                                    <TouchableOpacity
+                                        key={d.id}
+                                        style={[s.destRow, i < RECENTS.length - 1 && s.destDivider]}
+                                        activeOpacity={0.6}
+                                    >
+                                        <Text style={s.clockIcon}>🕐</Text>
+                                        <Text style={s.destName}>{d.name}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
                         )}
-                    />
-                ) : query.length > 0 && !searching ? (
-                    <View style={s.emptyWrap}>
-                        <Text style={s.emptyText}>No places found within 30 km</Text>
-                    </View>
-                ) : (
-                    // Static recents when search is empty
-                    <View style={s.list}>
-                        {RECENTS.map((d, i) => (
-                            <TouchableOpacity
-                                key={d.id}
-                                style={[s.destRow, i < RECENTS.length - 1 && s.destDivider]}
-                                activeOpacity={0.6}
-                            >
-                                <Text style={s.clockIcon}>🕐</Text>
-                                <Text style={s.destName}>{d.name}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                )}
 
-                <View style={{ flex: 1 }} />
+                        <View style={{ flex: 1 }} />
+                    </>
+                )}
 
                 {/* ── Availability Toggle (hidden when user is a joined passenger) ── */}
                 {(!activeRide || activeRide.is_creator) && (
