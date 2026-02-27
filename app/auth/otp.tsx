@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Keyboard } from 'react-native';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Keyboard, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, BORDER_RADIUS } from '../../constants/theme';
@@ -18,6 +18,23 @@ export default function OTPScreen() {
     const [otp, setOtp] = useState(['', '', '', '', '', '']);
     const inputs = useRef<Array<TextInput | null>>([]);
     const [loading, setLoading] = useState(false);
+    const [resendLoading, setResendLoading] = useState(false);
+    const [countdown, setCountdown] = useState(0);
+    const countdownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const startCountdown = useCallback(() => {
+        setCountdown(30);
+        const tick = () => {
+            setCountdown(prev => {
+                if (prev <= 1) return 0;
+                countdownRef.current = setTimeout(tick, 1000);
+                return prev - 1;
+            });
+        };
+        countdownRef.current = setTimeout(tick, 1000);
+    }, []);
+
+    useEffect(() => () => { if (countdownRef.current) clearTimeout(countdownRef.current); }, []);
     const [alert, setAlert] = useState<{
         visible: boolean;
         type: 'success' | 'error' | 'info';
@@ -36,10 +53,21 @@ export default function OTPScreen() {
     };
 
     const handleOtpChange = (text: string, index: number) => {
+        // Handle paste: if more than 1 char spread digits across remaining cells
+        if (text.length > 1) {
+            const digits = text.replace(/[^0-9]/g, '').slice(0, 6);
+            const newOtp = [...otp];
+            for (let i = 0; i < digits.length && index + i < 6; i++) {
+                newOtp[index + i] = digits[i];
+            }
+            setOtp(newOtp);
+            const lastFilled = Math.min(index + digits.length, 5);
+            inputs.current[lastFilled]?.focus();
+            return;
+        }
         const newOtp = [...otp];
         newOtp[index] = text;
         setOtp(newOtp);
-
         if (text && index < 5) {
             inputs.current[index + 1]?.focus();
         }
@@ -48,6 +76,20 @@ export default function OTPScreen() {
     const handleKeyPress = (e: any, index: number) => {
         if (e.nativeEvent.key === 'Backspace' && !otp[index] && index > 0) {
             inputs.current[index - 1]?.focus();
+        }
+    };
+
+    const handleResend = async () => {
+        if (countdown > 0 || resendLoading) return;
+        setResendLoading(true);
+        try {
+            const response = await authService.sendOTP(phone as string, type as 'login' | 'signup');
+            showAlert('success', 'OTP Resent', `New code: ${response.otp}`);
+            startCountdown();
+        } catch (err: any) {
+            showAlert('error', 'Resend Failed', err?.response?.data?.error ?? 'Please try again.');
+        } finally {
+            setResendLoading(false);
         }
     };
 
@@ -155,9 +197,15 @@ export default function OTPScreen() {
 
                 <View style={styles.resendContainer}>
                     <Text style={styles.resendText}>Didn't receive code? </Text>
-                    <TouchableOpacity>
-                        <Text style={styles.resendLink}>Resend</Text>
-                    </TouchableOpacity>
+                    {resendLoading ? (
+                        <ActivityIndicator size="small" color={COLORS.primaryDark} />
+                    ) : countdown > 0 ? (
+                        <Text style={styles.resendText}>Resend in {countdown}s</Text>
+                    ) : (
+                        <TouchableOpacity onPress={handleResend}>
+                            <Text style={styles.resendLink}>Resend</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
             </View>
 

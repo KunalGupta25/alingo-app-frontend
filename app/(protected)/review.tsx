@@ -179,7 +179,10 @@ export default function ReviewScreen() {
                 onPress={() => router.replace('/home')}
                 activeOpacity={0.8}
             >
-                <Text style={s.doneBtnText}>
+                <Text style={[
+                    s.doneBtnText,
+                    (!allSubmitted && participants.length > 0) && s.doneBtnTextSecondary,
+                ]}>
                     {allSubmitted || participants.length === 0 ? '🏠 Back to Home' : 'Skip & Go Home'}
                 </Text>
             </TouchableOpacity>
@@ -257,4 +260,5 @@ const s = StyleSheet.create({
     },
     doneBtnSecondary: { backgroundColor: 'transparent', borderWidth: 1, borderColor: C.cardBorder },
     doneBtnText: { color: C.btnText, fontSize: 16, fontWeight: '700' },
+    doneBtnTextSecondary: { color: 'rgba(255,255,255,0.7)' },
 });

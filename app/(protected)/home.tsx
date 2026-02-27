@@ -115,7 +115,14 @@ export default function HomeScreen() {
     const lastH = useRef(SHEET_MIN);
 
     // ── Init ───────────────────────────────────────────────
-    useEffect(() => { requestLocation(); fetchMyActiveRide(); }, []);
+    useEffect(() => { requestLocation(); fetchMyActiveRide(); loadAvailability(); }, []);
+
+    const loadAvailability = async () => {
+        try {
+            const me = await userService.getMe();
+            setAvailable(me.available_for_ride ?? false);
+        } catch { /* silent */ }
+    };
 
     const fetchMyActiveRide = async () => {
         try {
@@ -435,8 +442,8 @@ export default function HomeScreen() {
 
                 <View style={{ flex: 1 }} />
 
-                {/* ── Availability Toggle ──────────────────────── */}
-                {!activeRide && (
+                {/* ── Availability Toggle (hidden when user is a joined passenger) ── */}
+                {(!activeRide || activeRide.is_creator) && (
                     <View style={s.availRow}>
                         <Text style={s.availLabel}>🟢 Available for rides</Text>
                         <Switch

@@ -419,7 +419,7 @@ const styles = StyleSheet.create({
         borderColor: 'transparent',
     },
     genderButtonActive: {
-        backgroundColor: COLORS.lightGreen,
+        backgroundColor: COLORS.button,
         borderColor: COLORS.button,
     },
     genderText: {
@@ -428,8 +428,8 @@ const styles = StyleSheet.create({
         opacity: 0.7,
     },
     genderTextActive: {
-        color: COLORS.button, // Fixed color
-        fontWeight: '600',
+        color: COLORS.buttonText,
+        fontWeight: '700',
         opacity: 1,
     },
     button: {
