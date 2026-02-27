@@ -116,8 +116,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                         router.replace('/(protected)/home');
                     }
                 } else if (isPending) {
-                    // Pending verification: Must be on pending screen
-                    if (currentRoute !== '(protected)/verification-pending') {
+                    // Pending verification: Must be on pending screen or identity verification
+                    if (currentRoute !== '(protected)/verification-pending' && currentRoute !== '(protected)/identity-verification') {
                         router.replace('/(protected)/verification-pending');
                     }
                 } else {
