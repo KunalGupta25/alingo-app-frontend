@@ -21,37 +21,39 @@ import { useAuth } from '../../context/AuthContext';
 import { userService } from '../../services/userService';
 import { rideService } from '../../services/rideService';
 
-// ── Palette ───────────────────────────────────────────────
 const C = {
-    sheetBg: '#8EB69B',
-    searchBg: '#235347',
-    searchText: '#FFFFFF',
-    searchPlaceholder: 'rgba(255,255,255,0.6)',
-    pill: '#163832',
-    pillText: '#FFFFFF',
-    pillDot: '#8EB69B',
-    destText: '#163832',
-    divider: 'rgba(22,56,50,0.15)',
-    navBg: '#8EB69B',
-    navActiveIcon: '#163832',
-    navInactiveIcon: 'rgba(22,56,50,0.4)',
-    navDivider: 'rgba(22,56,50,0.12)',
-    suggestionBg: '#FFFFFF',
-    suggestionBorder: 'rgba(22,56,50,0.1)',
+    sheetBg: 'rgba(17,33,20,0.95)',       // #112114 with opacity for backdrop blur
+    searchBg: 'rgba(14,129,33,0.1)',     // #0e8121 / 10%
+    searchBorder: 'rgba(14,129,33,0.2)', // #0e8121 / 20%
+    searchText: '#F1F5F9',               // slate-100
+    searchPlaceholder: '#94A3B8',        // slate-400
+    pill: 'rgba(17,33,20,0.8)',          // #112114 / 80%
+    pillText: '#E2E8F0',                 // slate-200
+    pillDot: '#0e8121',                  // primary #0e8121
+    destText: '#F1F5F9',                 // slate-100
+    destSub: '#64748B',                  // slate-500
+    divider: 'rgba(14,129,33,0.1)',      // primary / 10%
+    navBg: '#112114',                    // background-dark
+    navActiveIcon: '#0e8121',            // primary #0e8121
+    navInactiveIcon: '#64748B',          // slate-500
+    navDivider: 'rgba(14,129,33,0.2)',   // primary / 20%
+    suggestionBg: 'rgba(14,129,33,0.1)', // #0e8121 / 10% for hover state
+    primary: '#0e8121',
+    headerBg: 'rgba(17,33,20,0.6)',      // For the notification icon
 };
 
 const { height: SCREEN_H } = Dimensions.get('window');
 const NAV_H = Platform.OS === 'ios' ? 84 : 68;   // navbar height (incl. safe area)
-const SHEET_MIN = SCREEN_H * 0.50;
-const SHEET_MAX = SCREEN_H * 0.80;
+const SHEET_MIN = SCREEN_H * 0.20; // Just enough for the drag handle and the search bar
+const SHEET_MAX = SCREEN_H * 0.85;
 
 // ── Static recents (shown when search is empty) ───────────
 const RECENTS = [
-    { id: '1', name: 'Parul University' },
-    { id: '2', name: 'Railway Station' },
-    { id: '3', name: 'D-Mart' },
-    { id: '4', name: 'Mall' },
-    { id: '5', name: 'Air Port' },
+    { id: '1', name: 'Parul University', sub: 'Waghodia, Vadodara', icon: '🎓' },
+    { id: '2', name: 'Railway Station', sub: 'Main Junction, Center', icon: '🚆' },
+    { id: '3', name: 'D-Mart', sub: 'Hypermarket Outlet', icon: '🛒' },
+    { id: '4', name: 'Inorbit Mall', sub: 'Shopping & Entertainment', icon: '🛍️' },
+    { id: '5', name: 'Air Port', sub: 'International Terminal', icon: '✈️' },
 ];
 
 // ── 30km degree offset (~0.27° lat, ~0.32° lon at 23° N) ───
@@ -356,12 +358,29 @@ export default function HomeScreen() {
 
             {/* ── Header Area ──────────────────────────── */}
             <View style={s.headerWrap} pointerEvents="box-none">
-                <Text style={s.greetingText}>
-                    Hello {user?.full_name?.split(' ')[0] || 'Rider'}! 🚗
-                </Text>
-                <View style={s.pill}>
-                    <View style={s.pillDot} />
-                    <Text style={s.pillText} numberOfLines={1}>{locationLabel}</Text>
+                <View style={s.headerTopRow}>
+                    <View style={s.headerGreetingWrap}>
+                        <View style={s.headerCarIcon}>
+                            <Text style={{ fontSize: 18 }}>🚘</Text>
+                        </View>
+                        <Text style={s.greetingText}>
+                            Hello {user?.full_name?.split(' ')[0] || 'Rider'}! 🚗
+                        </Text>
+                    </View>
+                    <TouchableOpacity style={s.notificationBtn}>
+                        <Text style={{ fontSize: 20 }}>🔔</Text>
+                    </TouchableOpacity>
+                </View>
+
+                {/* Pickup Pill */}
+                <View style={{ alignItems: 'center' }}>
+                    <TouchableOpacity style={s.pill}>
+                        <Text style={s.pillLocationIcon}>⦿</Text>
+                        <Text style={s.pillText} numberOfLines={1}>
+                            Pickup: {locationLabel !== 'Locating…' ? locationLabel : 'Searching...'}
+                        </Text>
+                        <Text style={s.pillChevronIcon}>⌄</Text>
+                    </TouchableOpacity>
                 </View>
             </View>
 
@@ -398,6 +417,11 @@ export default function HomeScreen() {
                             )}
                         </View>
 
+                        {/* Destinations Title */}
+                        {!query && (
+                            <Text style={s.sectionHeader}>FREQUENT DESTINATIONS</Text>
+                        )}
+
                         {/* Dynamic suggestions OR static recents */}
                         {suggestions.length > 0 ? (
                             <FlatList
@@ -407,11 +431,11 @@ export default function HomeScreen() {
                                 keyboardShouldPersistTaps="handled"
                                 renderItem={({ item, index }) => (
                                     <TouchableOpacity
-                                        style={[s.destRow, index < suggestions.length - 1 && s.destDivider]}
+                                        style={[s.destRow, index < suggestions.length - 1 && s.destDivider, { backgroundColor: 'transparent' }]}
                                         onPress={() => handleSelectSuggestion(item)}
                                         activeOpacity={0.6}
                                     >
-                                        <Text style={s.pinIcon}>📍</Text>
+                                        <View style={s.iconWrap}><Text style={s.pinIcon}>📍</Text></View>
                                         <View style={s.destInfo}>
                                             <Text style={s.destName} numberOfLines={1}>
                                                 {item.display_name.split(',')[0]}
@@ -420,6 +444,7 @@ export default function HomeScreen() {
                                                 {item.display_name.split(',').slice(1, 3).join(',')}
                                             </Text>
                                         </View>
+                                        <Text style={s.chevronIcon}>›</Text>
                                     </TouchableOpacity>
                                 )}
                             />
@@ -436,8 +461,14 @@ export default function HomeScreen() {
                                         style={[s.destRow, i < RECENTS.length - 1 && s.destDivider]}
                                         activeOpacity={0.6}
                                     >
-                                        <Text style={s.clockIcon}>🕐</Text>
-                                        <Text style={s.destName}>{d.name}</Text>
+                                        <View style={s.iconWrap}>
+                                            <Text style={s.clockIcon}>{d.icon}</Text>
+                                        </View>
+                                        <View style={s.destInfo}>
+                                            <Text style={s.destName}>{d.name}</Text>
+                                            <Text style={s.destSub}>{d.sub}</Text>
+                                        </View>
+                                        <Text style={s.chevronIcon}>›</Text>
                                     </TouchableOpacity>
                                 ))}
                             </View>
@@ -568,27 +599,57 @@ const s = StyleSheet.create({
         position: 'absolute',
         top: Platform.OS === 'android' ? 44 : 60,
         left: 20, right: 20,
-        gap: 12,
+        gap: 16,
+    },
+    headerTopRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    headerGreetingWrap: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+    headerCarIcon: {
+        backgroundColor: C.primary,
+        width: 40, height: 40,
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5,
     },
     greetingText: {
-        fontSize: 28,
-        fontWeight: '800',
+        fontSize: 22,
+        fontWeight: '700',
         color: '#FFFFFF',
         textShadowColor: 'rgba(5, 31, 32, 0.5)',
         textShadowOffset: { width: 0, height: 2 },
         textShadowRadius: 4,
+    },
+    notificationBtn: {
+        backgroundColor: C.headerBg,
+        width: 44, height: 44,
+        borderRadius: 22,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1, borderColor: 'rgba(14,129,33,0.3)',
+        shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 5,
     },
     pill: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: C.pill,
         borderRadius: 24,
-        paddingHorizontal: 18,
-        paddingVertical: 12,
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderWidth: 1, borderColor: 'rgba(14,129,33,0.3)',
         gap: 8,
+        shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 8,
     },
-    pillDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: C.pillDot },
-    pillText: { color: C.pillText, fontSize: 15, fontWeight: '500', flex: 1 },
+    pillLocationIcon: { color: C.primary, fontSize: 16 },
+    pillText: { color: C.pillText, fontSize: 14, fontWeight: '500' },
+    pillChevronIcon: { color: '#94A3B8', fontSize: 18, marginTop: -6 },
 
     sheet: {
         position: 'absolute', bottom: NAV_H, left: 0, right: 0,
@@ -605,32 +666,53 @@ const s = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: C.searchBg,
+        borderWidth: 1,
+        borderColor: C.searchBorder,
         borderRadius: 14,
         marginHorizontal: 16,
-        marginBottom: 8,
+        marginBottom: 24,
         paddingHorizontal: 16,
         paddingVertical: 14,
         gap: 10,
     },
-    searchIcon: { fontSize: 16 },
-    searchInput: { flex: 1, fontSize: 15, color: C.searchText, fontWeight: '400' },
+    searchIcon: { fontSize: 16, color: C.primary },
+    searchInput: { flex: 1, fontSize: 16, color: C.searchText, fontWeight: '400' },
     clearBtn: { color: 'rgba(255,255,255,0.6)', fontSize: 16, fontWeight: '600' },
 
-    list: { paddingHorizontal: 8 },
+    sectionHeader: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: C.primary,
+        letterSpacing: 1.5,
+        paddingHorizontal: 24,
+        marginBottom: 12,
+        textTransform: 'uppercase',
+    },
+
+    list: { paddingHorizontal: 16 },
 
     destRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 12,
-        paddingVertical: 14,
+        paddingHorizontal: 8,
+        paddingVertical: 12,
+        borderRadius: 12,
         gap: 14,
     },
-    destDivider: { borderBottomWidth: 1, borderBottomColor: C.divider },
-    clockIcon: { fontSize: 16, opacity: 0.7 },
-    pinIcon: { fontSize: 16 },
-    destInfo: { flex: 1 },
-    destName: { fontSize: 14, color: C.destText, fontWeight: '500' },
-    destSub: { fontSize: 12, color: 'rgba(22,56,50,0.55)', marginTop: 1 },
+    destDivider: { /* removed bottom border, relying on spacing for sleek look */ },
+    iconWrap: {
+        backgroundColor: 'rgba(14,129,33,0.15)',
+        width: 36, height: 36,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    clockIcon: { fontSize: 18 },
+    pinIcon: { fontSize: 18 },
+    destInfo: { flex: 1, justifyContent: 'center' },
+    destName: { fontSize: 15, color: C.destText, fontWeight: '600', marginBottom: 2 },
+    destSub: { fontSize: 13, color: C.destSub },
+    chevronIcon: { color: '#475569', fontSize: 24, fontWeight: '300' },
 
     emptyWrap: { alignItems: 'center', paddingVertical: 20 },
     emptyText: { color: 'rgba(22,56,50,0.5)', fontSize: 14 },
