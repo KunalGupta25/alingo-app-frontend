@@ -15,6 +15,7 @@ import {
     LayoutAnimation,
     UIManager,
     ScrollView,
+    Keyboard,
 } from 'react-native';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -131,9 +132,20 @@ export default function HomeScreen() {
         }
     };
 
-    // Bottom sheet
-    const sheetH = useRef(new Animated.Value(SHEET_MIN)).current;
-    const lastH = useRef(SHEET_MIN);
+    // Search Sheet Keyboard handling
+    const [keyboardH, setKeyboardH] = useState(0);
+
+    useEffect(() => {
+        const k1 = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', (e) => {
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            setKeyboardH(e.endCoordinates.height);
+        });
+        const k2 = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => {
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            setKeyboardH(0);
+        });
+        return () => { k1.remove(); k2.remove(); };
+    }, []);
 
     // ── Init ───────────────────────────────────────────────
     useEffect(() => { requestLocation(); fetchMyActiveRide(); fetchMyRequests(); loadAvailability(); }, []);
@@ -349,33 +361,8 @@ export default function HomeScreen() {
         }, 600);
 
         // Collapse sheet to show the map
-        Animated.spring(sheetH, {
-            toValue: SHEET_MIN,
-            useNativeDriver: false,
-            tension: 60, friction: 10,
-        }).start();
-        lastH.current = SHEET_MIN;
+        Keyboard.dismiss();
     };
-
-    // ── Pan responder for sheet ────────────────────────────
-    const pan = useRef(
-        PanResponder.create({
-            onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 5,
-            onPanResponderMove: (_, g) => {
-                const next = lastH.current - g.dy;
-                sheetH.setValue(Math.min(SHEET_MAX, Math.max(SHEET_MIN, next)));
-            },
-            onPanResponderRelease: (_, g) => {
-                const next = lastH.current - g.dy;
-                const snapTo = next > (SHEET_MIN + SHEET_MAX) / 2 ? SHEET_MAX : SHEET_MIN;
-                lastH.current = snapTo;
-                Animated.spring(sheetH, {
-                    toValue: snapTo, useNativeDriver: false,
-                    tension: 60, friction: 10,
-                }).start();
-            },
-        })
-    ).current;
 
     // ── Render ─────────────────────────────────────────────
     const defaultRegion = {
@@ -558,14 +545,15 @@ export default function HomeScreen() {
                     )}
                 </View>
             ) : (
-                // ── Location Search Sheet ───
-                <Animated.View style={[s.sheet, { height: sheetH }]}>
-
-                    {/* Drag handle */}
-                    <View {...pan.panHandlers} style={s.handleWrap}>
-                        <View style={s.handle} />
-                    </View>
-
+                // ── Location Search Sheet (Dynamic bounds) ───
+                <View
+                    style={[
+                        s.sheet,
+                        keyboardH > 0
+                            ? { top: Platform.OS === 'ios' ? 100 : 80, bottom: keyboardH, maxHeight: undefined }
+                            : { bottom: NAV_H, maxHeight: SCREEN_H * 0.45, paddingBottom: 24, paddingTop: 16 }
+                    ]}
+                >
                     {/* Search bar */}
                     <View style={s.searchBar}>
                         <Text style={s.searchIcon}>🔍</Text>
@@ -646,8 +634,6 @@ export default function HomeScreen() {
                         </View>
                     )}
 
-                    <View style={{ flex: 1 }} />
-
                     {/* ── Availability Toggle ── */}
                     <View style={s.availRow}>
                         <Text style={s.availLabel}>🟢 Available for rides</Text>
@@ -672,7 +658,7 @@ export default function HomeScreen() {
                             ))}
                         </View>
                     )}
-                </Animated.View>
+                </View>
             )}
 
             {/* ── Bottom nav bar (always visible, outside the sheet) ─── */}
