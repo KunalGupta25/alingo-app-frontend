@@ -12,7 +12,14 @@ import {
     TouchableOpacity,
     View,
     ActivityIndicator,
+    LayoutAnimation,
+    UIManager,
+    ScrollView,
 } from 'react-native';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -43,9 +50,10 @@ const C = {
 };
 
 const { height: SCREEN_H } = Dimensions.get('window');
-const NAV_H = Platform.OS === 'ios' ? 84 : 68;   // navbar height (incl. safe area)
-const SHEET_MIN = SCREEN_H * 0.20; // Just enough for the drag handle and the search bar
+const NAV_H = Platform.OS === 'ios' ? 84 : 68;
+const SHEET_MIN = SCREEN_H * 0.20;
 const SHEET_MAX = SCREEN_H * 0.85;
+const ACTIVE_SHEET_MAX = SCREEN_H * 0.66;
 
 // ── Static recents (shown when search is empty) ───────────
 const RECENTS = [
@@ -103,6 +111,13 @@ export default function HomeScreen() {
 
     const [pendingRequests, setPendingRequests] = useState<any[]>([]);
     const [canceling, setCanceling] = useState(false);
+
+    const [activeRideExpanded, setActiveRideExpanded] = useState(false);
+
+    const toggleActiveRide = () => {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setActiveRideExpanded(prev => !prev);
+    };
 
     const handleAvailToggle = async (val: boolean) => {
         setTogglingAvail(true);
@@ -420,101 +435,220 @@ export default function HomeScreen() {
             </View>
 
             {/* ── Bottom sheet ───────────────────────────── */}
-            <Animated.View style={[s.sheet, { height: sheetH }]}>
 
-                {/* Drag handle */}
-                <View {...pan.panHandlers} style={s.handleWrap}>
-                    <View style={s.handle} />
-                </View>
+            {activeRide ? (
+                // ── Active Ride Sheet (Dynamic Height) ───
+                <View style={[s.sheet, { maxHeight: ACTIVE_SHEET_MAX, paddingBottom: 16 }]}>
+                    <TouchableOpacity onPress={toggleActiveRide} style={s.handleWrap} activeOpacity={0.8}>
+                        <View style={s.handle} />
+                    </TouchableOpacity>
 
-                {!activeRide && (
-                    <>
-                        {/* Search bar */}
-                        <View style={s.searchBar}>
-                            <Text style={s.searchIcon}>🔍</Text>
-                            <TextInput
-                                style={s.searchInput}
-                                placeholder="Where are you going?"
-                                placeholderTextColor={C.searchPlaceholder}
-                                value={query}
-                                onChangeText={handleQueryChange}
-                                returnKeyType="search"
-                                clearButtonMode="while-editing"
-                                autoCorrect={false}
-                            />
-                            {searching && (
-                                <ActivityIndicator size="small" color={C.searchText} />
+                    {activeRideExpanded ? (
+                        <ScrollView bounces={false} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 20 }}>
+                            {/* Header */}
+                            <View style={s.expandedHeaderRow}>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={s.expandedTitle} numberOfLines={1}>Trip to {activeRide.destination_name.split(',')[0]}</Text>
+                                    <Text style={s.expandedId}>ID: #RC-{activeRide.ride_id.slice(-4).toUpperCase()}</Text>
+                                </View>
+                                <TouchableOpacity style={s.expandedCompleteBtn} onPress={handleCompleteRide} disabled={completing}>
+                                    {completing ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.expandedCompleteText}>Complete</Text>}
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* Info Card */}
+                            <View style={s.infoCard}>
+                                <View style={s.infoRow}>
+                                    <Text style={s.infoIcon}>🕒</Text>
+                                    <View>
+                                        <Text style={s.infoLabel}>TIME</Text>
+                                        <Text style={s.infoValue}>{activeRide.ride_time}</Text>
+                                    </View>
+                                </View>
+                                <View style={s.infoRow}>
+                                    <Text style={s.infoIcon}>📍</Text>
+                                    <View>
+                                        <Text style={s.infoLabel}>DESTINATION</Text>
+                                        <Text style={s.infoValue}>{activeRide.destination_name}</Text>
+                                    </View>
+                                </View>
+                            </View>
+
+                            {/* Participants */}
+                            <Text style={s.sectionTitle}>PARTICIPANTS</Text>
+                            {activeRide.participants && activeRide.participants.length > 0 ? (
+                                activeRide.participants.map(p => (
+                                    <View key={p.user_id} style={s.participantCard}>
+                                        <View style={s.participantAvatar}><Text style={s.participantAvatarText}>👤</Text></View>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={s.participantName}>{p.user_id === activeRide.creator_id ? 'You (Creator)' : p.name}</Text>
+                                            <Text style={s.participantRole}>{p.status === 'APPROVED' ? 'Passenger' : p.status}</Text>
+                                        </View>
+                                        <Text style={s.chatIcon}>💬</Text>
+                                    </View>
+                                ))
+                            ) : (
+                                <Text style={s.emptyListText}>Just you so far...</Text>
                             )}
-                            {query.length > 0 && !searching && (
-                                <TouchableOpacity onPress={() => { setQuery(''); setSuggestions([]); }}>
-                                    <Text style={s.clearBtn}>✕</Text>
+
+                            {/* Pending Requests */}
+                            {activeRide.is_creator && (
+                                <>
+                                    <Text style={[s.sectionTitle, { marginTop: 16 }]}>PENDING REQUESTS</Text>
+                                    {activeRide.participants.filter(p => p.status === 'PENDING').length > 0 ? (
+                                        activeRide.participants.filter(p => p.status === 'PENDING').map(p => (
+                                            <View key={p.user_id} style={s.participantCard}>
+                                                <View style={s.participantAvatar}><Text style={s.participantAvatarText}>👤</Text></View>
+                                                <Text style={[s.participantName, { flex: 1 }]}>{p.name}</Text>
+                                                <View style={{ flexDirection: 'row', gap: 8 }}>
+                                                    <TouchableOpacity style={s.approveBtnMini} onPress={() => handleRespond(p.user_id, 'APPROVE')} disabled={respondingTo === p.user_id}>
+                                                        <Text style={s.approveBtnTextTiny}>✓</Text>
+                                                    </TouchableOpacity>
+                                                    <TouchableOpacity style={s.rejectBtnMini} onPress={() => handleRespond(p.user_id, 'REJECT')} disabled={respondingTo === p.user_id}>
+                                                        <Text style={s.rejectBtnTextTiny}>✕</Text>
+                                                    </TouchableOpacity>
+                                                </View>
+                                            </View>
+                                        ))
+                                    ) : (
+                                        <View style={s.emptyPendingCard}>
+                                            <Text style={s.emptyPendingIcon}>👥+</Text>
+                                            <Text style={s.emptyPendingText}>No pending requests at the moment</Text>
+                                        </View>
+                                    )}
+                                </>
+                            )}
+
+                            {/* Cancel Ride */}
+                            {activeRide.is_creator && (
+                                <TouchableOpacity style={s.bigCancelBtn} onPress={handleCancelRide} disabled={canceling}>
+                                    {canceling ? <ActivityIndicator size="small" color="#E07070" /> : (
+                                        <>
+                                            <Text style={s.bigCancelIcon}>✕</Text>
+                                            <Text style={s.bigCancelText}>Cancel Ride</Text>
+                                        </>
+                                    )}
                                 </TouchableOpacity>
                             )}
+                        </ScrollView>
+                    ) : (
+                        <TouchableOpacity activeOpacity={0.9} onPress={toggleActiveRide} style={s.minimizedWrap}>
+                            <View style={s.minHeaderRow}>
+                                <Text style={s.minTitle}>YOUR ACTIVE RIDE</Text>
+                                <View style={s.onTripBadge}><Text style={s.onTripText}>ON TRIP</Text></View>
+                            </View>
+
+                            <View style={s.minRowMain}>
+                                <View style={{ flex: 1 }}>
+                                    <View style={s.minDestWrap}>
+                                        <Text style={s.minDestIcon}>📍</Text>
+                                        <Text style={s.minDestText} numberOfLines={2}>{activeRide.destination_name}</Text>
+                                    </View>
+                                    <View style={s.minStatsWrap}>
+                                        <Text style={s.minStatText}>🕒 {activeRide.ride_time}</Text>
+                                        <Text style={s.minStatDot}> • </Text>
+                                        <Text style={s.minStatText}>👥 {activeRide.completion_votes}/{activeRide.majority_needed} votes</Text>
+                                    </View>
+                                </View>
+                                <TouchableOpacity style={s.minCompleteBtn} onPress={handleCompleteRide} disabled={completing}>
+                                    {completing ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.minCompleteText}>Complete</Text>}
+                                </TouchableOpacity>
+                            </View>
+                        </TouchableOpacity>
+                    )}
+                </View>
+            ) : (
+                // ── Location Search Sheet ───
+                <Animated.View style={[s.sheet, { height: sheetH }]}>
+
+                    {/* Drag handle */}
+                    <View {...pan.panHandlers} style={s.handleWrap}>
+                        <View style={s.handle} />
+                    </View>
+
+                    {/* Search bar */}
+                    <View style={s.searchBar}>
+                        <Text style={s.searchIcon}>🔍</Text>
+                        <TextInput
+                            style={s.searchInput}
+                            placeholder="Where are you going?"
+                            placeholderTextColor={C.searchPlaceholder}
+                            value={query}
+                            onChangeText={handleQueryChange}
+                            returnKeyType="search"
+                            clearButtonMode="while-editing"
+                            autoCorrect={false}
+                        />
+                        {searching && (
+                            <ActivityIndicator size="small" color={C.searchText} />
+                        )}
+                        {query.length > 0 && !searching && (
+                            <TouchableOpacity onPress={() => { setQuery(''); setSuggestions([]); }}>
+                                <Text style={s.clearBtn}>✕</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+
+                    {/* Destinations Title */}
+                    {!query && (
+                        <Text style={s.sectionHeader}>FREQUENT DESTINATIONS</Text>
+                    )}
+
+                    {/* Dynamic suggestions OR static recents */}
+                    {suggestions.length > 0 ? (
+                        <FlatList
+                            data={suggestions}
+                            keyExtractor={item => item.place_id?.toString() ?? item.display_name}
+                            style={s.list}
+                            keyboardShouldPersistTaps="handled"
+                            renderItem={({ item, index }) => (
+                                <TouchableOpacity
+                                    style={[s.destRow, index < suggestions.length - 1 && s.destDivider, { backgroundColor: 'transparent' }]}
+                                    onPress={() => handleSelectSuggestion(item)}
+                                    activeOpacity={0.6}
+                                >
+                                    <View style={s.iconWrap}><Text style={s.pinIcon}>📍</Text></View>
+                                    <View style={s.destInfo}>
+                                        <Text style={s.destName} numberOfLines={1}>
+                                            {item.display_name.split(',')[0]}
+                                        </Text>
+                                        <Text style={s.destSub} numberOfLines={1}>
+                                            {item.display_name.split(',').slice(1, 3).join(',')}
+                                        </Text>
+                                    </View>
+                                    <Text style={s.chevronIcon}>›</Text>
+                                </TouchableOpacity>
+                            )}
+                        />
+                    ) : query.length > 0 && !searching ? (
+                        <View style={s.emptyWrap}>
+                            <Text style={s.emptyText}>No places found within 30 km</Text>
                         </View>
+                    ) : (
+                        // Static recents when search is empty
+                        <View style={s.list}>
+                            {RECENTS.map((d, i) => (
+                                <TouchableOpacity
+                                    key={d.id}
+                                    style={[s.destRow, i < RECENTS.length - 1 && s.destDivider]}
+                                    activeOpacity={0.6}
+                                >
+                                    <View style={s.iconWrap}>
+                                        <Text style={s.clockIcon}>{d.icon}</Text>
+                                    </View>
+                                    <View style={s.destInfo}>
+                                        <Text style={s.destName}>{d.name}</Text>
+                                        <Text style={s.destSub}>{d.sub}</Text>
+                                    </View>
+                                    <Text style={s.chevronIcon}>›</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    )}
 
-                        {/* Destinations Title */}
-                        {!query && (
-                            <Text style={s.sectionHeader}>FREQUENT DESTINATIONS</Text>
-                        )}
+                    <View style={{ flex: 1 }} />
 
-                        {/* Dynamic suggestions OR static recents */}
-                        {suggestions.length > 0 ? (
-                            <FlatList
-                                data={suggestions}
-                                keyExtractor={item => item.place_id?.toString() ?? item.display_name}
-                                style={s.list}
-                                keyboardShouldPersistTaps="handled"
-                                renderItem={({ item, index }) => (
-                                    <TouchableOpacity
-                                        style={[s.destRow, index < suggestions.length - 1 && s.destDivider, { backgroundColor: 'transparent' }]}
-                                        onPress={() => handleSelectSuggestion(item)}
-                                        activeOpacity={0.6}
-                                    >
-                                        <View style={s.iconWrap}><Text style={s.pinIcon}>📍</Text></View>
-                                        <View style={s.destInfo}>
-                                            <Text style={s.destName} numberOfLines={1}>
-                                                {item.display_name.split(',')[0]}
-                                            </Text>
-                                            <Text style={s.destSub} numberOfLines={1}>
-                                                {item.display_name.split(',').slice(1, 3).join(',')}
-                                            </Text>
-                                        </View>
-                                        <Text style={s.chevronIcon}>›</Text>
-                                    </TouchableOpacity>
-                                )}
-                            />
-                        ) : query.length > 0 && !searching ? (
-                            <View style={s.emptyWrap}>
-                                <Text style={s.emptyText}>No places found within 30 km</Text>
-                            </View>
-                        ) : (
-                            // Static recents when search is empty
-                            <View style={s.list}>
-                                {RECENTS.map((d, i) => (
-                                    <TouchableOpacity
-                                        key={d.id}
-                                        style={[s.destRow, i < RECENTS.length - 1 && s.destDivider]}
-                                        activeOpacity={0.6}
-                                    >
-                                        <View style={s.iconWrap}>
-                                            <Text style={s.clockIcon}>{d.icon}</Text>
-                                        </View>
-                                        <View style={s.destInfo}>
-                                            <Text style={s.destName}>{d.name}</Text>
-                                            <Text style={s.destSub}>{d.sub}</Text>
-                                        </View>
-                                        <Text style={s.chevronIcon}>›</Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-                        )}
-
-                        <View style={{ flex: 1 }} />
-                    </>
-                )}
-
-                {/* ── Availability Toggle (hidden when user is a joined passenger) ── */}
-                {(!activeRide || activeRide.is_creator) && (
+                    {/* ── Availability Toggle ── */}
                     <View style={s.availRow}>
                         <Text style={s.availLabel}>🟢 Available for rides</Text>
                         <Switch
@@ -525,102 +659,21 @@ export default function HomeScreen() {
                             thumbColor={available ? '#051F20' : '#8EB69B'}
                         />
                     </View>
-                )}
 
-                {/* ── Manage Requests (creator only) ──────────── */}
-                {activeRide?.is_creator && (() => {
-                    const pending = activeRide.participants.filter(p => p.status === 'PENDING');
-                    if (!pending.length) return null;
-                    return (
-                        <View style={s.managePanel}>
-                            <Text style={s.managePanelTitle}>🔔 Join Requests ({pending.length})</Text>
-                            {pending.map(p => (
-                                <View key={p.user_id} style={s.manageRow}>
-                                    <Text style={s.manageName} numberOfLines={1}>{p.name}</Text>
-                                    <TouchableOpacity
-                                        style={s.approveBtn}
-                                        onPress={() => handleRespond(p.user_id, 'APPROVE')}
-                                        disabled={respondingTo === p.user_id}
-                                    >
-                                        {respondingTo === p.user_id
-                                            ? <ActivityIndicator size="small" color="#051F20" />
-                                            : <Text style={s.approveBtnText}>✓ Approve</Text>}
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={s.rejectBtn}
-                                        onPress={() => handleRespond(p.user_id, 'REJECT')}
-                                        disabled={respondingTo === p.user_id}
-                                    >
-                                        <Text style={s.rejectBtnText}>✗</Text>
-                                    </TouchableOpacity>
+                    {/* ── Pending Requests Banner (participant) ───── */}
+                    {pendingRequests.length > 0 && (
+                        <View style={s.pendingRequestsBanner}>
+                            <Text style={s.pendingRequestsTitle}>⏳ My Pending Requests ({pendingRequests.length})</Text>
+                            {pendingRequests.map(req => (
+                                <View key={req.ride_id} style={s.pendingReqRow}>
+                                    <Text style={s.pendingReqDest} numberOfLines={1}>→ {req.destination_name}</Text>
+                                    <Text style={s.pendingReqStatus}>{req.my_status}</Text>
                                 </View>
                             ))}
                         </View>
-                    );
-                })()}
-
-                {/* ── Active Ride Banner (creator OR joined) ───── */}
-                {activeRide && (
-                    <View style={s.completeRideBanner}>
-                        <View style={{ flex: 1 }}>
-                            <Text style={s.completeRideTitle}>
-                                {activeRide.is_creator ? '🚗 Your Ride' : '🎟 Joined Ride'}
-                            </Text>
-                            <Text style={s.completeRideSub} numberOfLines={1}>
-                                → {activeRide.destination_name}  ·  {activeRide.ride_time}
-                            </Text>
-                            {activeRide.participants && activeRide.participants.length > 0 && (
-                                <Text style={s.participantsText} numberOfLines={2}>
-                                    👥 {activeRide.participants.map(p => `${p.name} (${p.status})`).join(', ')}
-                                </Text>
-                            )}
-                            <Text style={s.completeRideVotes}>
-                                {activeRide.completion_votes}/{activeRide.majority_needed} votes to complete
-                            </Text>
-                        </View>
-                        <View style={{ alignItems: 'flex-end', gap: 8 }}>
-                            <TouchableOpacity
-                                style={[s.completeRideBtn, completing && { opacity: 0.6 }]}
-                                onPress={handleCompleteRide}
-                                disabled={completing || canceling}
-                                activeOpacity={0.8}
-                            >
-                                {completing
-                                    ? <ActivityIndicator size="small" color="#fff" />
-                                    : <Text style={s.completeRideBtnText}>Complete</Text>
-                                }
-                            </TouchableOpacity>
-                            {activeRide.is_creator && (
-                                <TouchableOpacity
-                                    style={[s.cancelRideBtn, canceling && { opacity: 0.6 }]}
-                                    onPress={handleCancelRide}
-                                    disabled={completing || canceling}
-                                    activeOpacity={0.8}
-                                >
-                                    {canceling
-                                        ? <ActivityIndicator size="small" color="#E07070" />
-                                        : <Text style={s.cancelRideBtnText}>Cancel</Text>
-                                    }
-                                </TouchableOpacity>
-                            )}
-                        </View>
-                    </View>
-                )}
-
-                {/* ── Pending Requests Banner (participant) ───── */}
-                {!activeRide && pendingRequests.length > 0 && (
-                    <View style={s.pendingRequestsBanner}>
-                        <Text style={s.pendingRequestsTitle}>⏳ My Pending Requests ({pendingRequests.length})</Text>
-                        {pendingRequests.map(req => (
-                            <View key={req.ride_id} style={s.pendingReqRow}>
-                                <Text style={s.pendingReqDest} numberOfLines={1}>→ {req.destination_name}</Text>
-                                <Text style={s.pendingReqStatus}>{req.my_status}</Text>
-                            </View>
-                        ))}
-                    </View>
-                )}
-
-            </Animated.View>
+                    )}
+                </Animated.View>
+            )}
 
             {/* ── Bottom nav bar (always visible, outside the sheet) ─── */}
             <View style={s.navBar}>
@@ -808,28 +861,56 @@ const s = StyleSheet.create({
     navIconRaw: { fontSize: 22, opacity: 0.4 },
     navIconActiveRaw: { opacity: 1 },
 
-    // ── Complete Ride banner ──────────────────────────────
-    completeRideBanner: {
-        flexDirection: 'row', alignItems: 'center',
-        backgroundColor: '#0B2B26',
-        borderTopWidth: 1, borderTopColor: 'rgba(142,182,155,0.2)',
-        paddingHorizontal: 16, paddingVertical: 12, gap: 12,
-    },
-    completeRideTitle: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
-    completeRideSub: { color: 'rgba(255,255,255,0.6)', fontSize: 12, marginTop: 2 },
-    completeRideVotes: { color: '#8EB69B', fontSize: 11, marginTop: 2 },
-    completeRideBtn: {
-        backgroundColor: '#8EB69B', borderRadius: 10,
-        paddingHorizontal: 16, paddingVertical: 10, alignItems: 'center',
-    },
-    completeRideBtnText: { color: '#051F20', fontSize: 13, fontWeight: '700' },
-    participantsText: { color: 'rgba(255,255,255,0.75)', fontSize: 12, marginTop: 4, lineHeight: 16 },
-    cancelRideBtn: {
-        backgroundColor: 'rgba(180,60,60,0.1)', borderRadius: 10,
-        paddingHorizontal: 16, paddingVertical: 8, alignItems: 'center',
-        borderWidth: 1, borderColor: 'rgba(180,60,60,0.3)',
-    },
-    cancelRideBtnText: { color: '#E07070', fontSize: 12, fontWeight: '700' },
+    // ── Dynamic Active Ride Sheet Styles ───────────────────
+    minimizedWrap: { paddingHorizontal: 20, paddingBottom: 16 },
+    minHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+    minTitle: { color: C.primary, fontSize: 13, fontWeight: '700', letterSpacing: 1 },
+    onTripBadge: { backgroundColor: 'rgba(14,129,33,0.15)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(14,129,33,0.2)' },
+    onTripText: { color: C.primary, fontSize: 11, fontWeight: '700' },
+
+    minRowMain: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+    minDestWrap: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 8, paddingRight: 16 },
+    minDestIcon: { color: C.primary, fontSize: 16, marginTop: 2 },
+    minDestText: { color: '#FFFFFF', fontSize: 20, fontWeight: '700' },
+    minStatsWrap: { flexDirection: 'row', alignItems: 'center' },
+    minStatText: { color: '#8EB69B', fontSize: 12 },
+    minStatDot: { color: '#64748B', fontSize: 12, marginHorizontal: 6 },
+    minCompleteBtn: { backgroundColor: C.primary, borderRadius: 12, paddingHorizontal: 18, paddingVertical: 12 },
+    minCompleteText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+
+    expandedHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+    expandedTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '700', marginBottom: 4 },
+    expandedId: { color: C.primary, fontSize: 13, fontWeight: '500' },
+    expandedCompleteBtn: { backgroundColor: C.primary, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10, marginLeft: 16 },
+    expandedCompleteText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
+
+    infoCard: { backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)', marginBottom: 24, gap: 16 },
+    infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+    infoIcon: { fontSize: 18, color: '#8EB69B', width: 24, textAlign: 'center' },
+    infoLabel: { color: '#64748B', fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: 4 },
+    infoValue: { color: '#E2E8F0', fontSize: 15, fontWeight: '500' },
+
+    sectionTitle: { color: '#64748B', fontSize: 12, fontWeight: '700', letterSpacing: 1, marginBottom: 16 },
+    participantCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 16, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)', gap: 12 },
+    participantAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
+    participantAvatarText: { fontSize: 20 },
+    participantName: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
+    participantRole: { color: '#8EB69B', fontSize: 12, marginTop: 2 },
+    chatIcon: { fontSize: 20, color: C.primary },
+    emptyListText: { color: '#64748B', fontSize: 14, fontStyle: 'italic', marginBottom: 24 },
+
+    emptyPendingCard: { alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent', borderRadius: 16, paddingHorizontal: 32, paddingVertical: 32, borderWidth: 1, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.1)', marginBottom: 24 },
+    emptyPendingIcon: { fontSize: 32, color: 'rgba(14,129,33,0.3)', marginBottom: 12 },
+    emptyPendingText: { color: '#64748B', fontSize: 14, textAlign: 'center' },
+
+    approveBtnMini: { backgroundColor: C.primary, width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+    approveBtnTextTiny: { color: '#FFF', fontSize: 14, fontWeight: '700' },
+    rejectBtnMini: { backgroundColor: 'rgba(180,60,60,0.2)', borderWidth: 1, borderColor: 'rgba(180,60,60,0.4)', width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+    rejectBtnTextTiny: { color: '#E07070', fontSize: 14, fontWeight: '700' },
+
+    bigCancelBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: 'rgba(180,60,60,0.05)', borderRadius: 16, paddingVertical: 16, borderWidth: 1, borderColor: 'rgba(180,60,60,0.3)', marginTop: 12, marginBottom: 20 },
+    bigCancelIcon: { color: '#E07070', fontSize: 18, fontWeight: '700' },
+    bigCancelText: { color: '#E07070', fontSize: 16, fontWeight: '700' },
 
     // ── Pending requests banner ─────────────────────
     pendingRequestsBanner: {
@@ -874,4 +955,5 @@ const s = StyleSheet.create({
         paddingHorizontal: 10, paddingVertical: 6,
     },
     rejectBtnText: { color: '#E07070', fontSize: 13, fontWeight: '700' },
+
 });
