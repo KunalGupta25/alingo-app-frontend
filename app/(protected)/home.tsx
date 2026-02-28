@@ -101,6 +101,9 @@ export default function HomeScreen() {
     const [available, setAvailable] = useState(false);
     const [togglingAvail, setTogglingAvail] = useState(false);
 
+    const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+    const [canceling, setCanceling] = useState(false);
+
     const handleAvailToggle = async (val: boolean) => {
         setTogglingAvail(true);
         try {
@@ -118,7 +121,7 @@ export default function HomeScreen() {
     const lastH = useRef(SHEET_MIN);
 
     // ── Init ───────────────────────────────────────────────
-    useEffect(() => { requestLocation(); fetchMyActiveRide(); loadAvailability(); }, []);
+    useEffect(() => { requestLocation(); fetchMyActiveRide(); fetchMyRequests(); loadAvailability(); }, []);
 
     const loadAvailability = async () => {
         try {
@@ -132,6 +135,38 @@ export default function HomeScreen() {
             const data = await rideService.getMyActiveRide();
             setActiveRide(data.ride as any);
         } catch { /* ignore — user may not have a ride */ }
+    };
+
+    const fetchMyRequests = async () => {
+        try {
+            const data = await rideService.getMyRequests();
+            setPendingRequests(data.requests || []);
+        } catch { /* ignore */ }
+    };
+
+    const handleCancelRide = async () => {
+        if (!activeRide) return;
+        import('react-native').then(({ Alert }) => {
+            Alert.alert('Cancel Ride', 'Are you sure you want to cancel this ride?', [
+                { text: 'No', style: 'cancel' },
+                {
+                    text: 'Yes, Cancel', style: 'destructive',
+                    onPress: async () => {
+                        setCanceling(true);
+                        try {
+                            await rideService.cancelRide(activeRide.ride_id);
+                            setActiveRide(null);
+                            fetchMyRequests();
+                        } catch (e: any) {
+                            const msg = e?.response?.data?.error ?? 'Failed to cancel ride.';
+                            Alert.alert('Error', msg);
+                        } finally {
+                            setCanceling(false);
+                        }
+                    }
+                }
+            ]);
+        });
     };
 
     const handleCompleteRide = async () => {
@@ -534,21 +569,54 @@ export default function HomeScreen() {
                             <Text style={s.completeRideSub} numberOfLines={1}>
                                 → {activeRide.destination_name}  ·  {activeRide.ride_time}
                             </Text>
+                            {activeRide.participants && activeRide.participants.length > 0 && (
+                                <Text style={s.participantsText} numberOfLines={2}>
+                                    👥 {activeRide.participants.map(p => `${p.name} (${p.status})`).join(', ')}
+                                </Text>
+                            )}
                             <Text style={s.completeRideVotes}>
                                 {activeRide.completion_votes}/{activeRide.majority_needed} votes to complete
                             </Text>
                         </View>
-                        <TouchableOpacity
-                            style={[s.completeRideBtn, completing && { opacity: 0.6 }]}
-                            onPress={handleCompleteRide}
-                            disabled={completing}
-                            activeOpacity={0.8}
-                        >
-                            {completing
-                                ? <ActivityIndicator size="small" color="#fff" />
-                                : <Text style={s.completeRideBtnText}>Complete</Text>
-                            }
-                        </TouchableOpacity>
+                        <View style={{ alignItems: 'flex-end', gap: 8 }}>
+                            <TouchableOpacity
+                                style={[s.completeRideBtn, completing && { opacity: 0.6 }]}
+                                onPress={handleCompleteRide}
+                                disabled={completing || canceling}
+                                activeOpacity={0.8}
+                            >
+                                {completing
+                                    ? <ActivityIndicator size="small" color="#fff" />
+                                    : <Text style={s.completeRideBtnText}>Complete</Text>
+                                }
+                            </TouchableOpacity>
+                            {activeRide.is_creator && (
+                                <TouchableOpacity
+                                    style={[s.cancelRideBtn, canceling && { opacity: 0.6 }]}
+                                    onPress={handleCancelRide}
+                                    disabled={completing || canceling}
+                                    activeOpacity={0.8}
+                                >
+                                    {canceling
+                                        ? <ActivityIndicator size="small" color="#E07070" />
+                                        : <Text style={s.cancelRideBtnText}>Cancel</Text>
+                                    }
+                                </TouchableOpacity>
+                            )}
+                        </View>
+                    </View>
+                )}
+
+                {/* ── Pending Requests Banner (participant) ───── */}
+                {!activeRide && pendingRequests.length > 0 && (
+                    <View style={s.pendingRequestsBanner}>
+                        <Text style={s.pendingRequestsTitle}>⏳ My Pending Requests ({pendingRequests.length})</Text>
+                        {pendingRequests.map(req => (
+                            <View key={req.ride_id} style={s.pendingReqRow}>
+                                <Text style={s.pendingReqDest} numberOfLines={1}>→ {req.destination_name}</Text>
+                                <Text style={s.pendingReqStatus}>{req.my_status}</Text>
+                            </View>
+                        ))}
                     </View>
                 )}
 
@@ -755,6 +823,24 @@ const s = StyleSheet.create({
         paddingHorizontal: 16, paddingVertical: 10, alignItems: 'center',
     },
     completeRideBtnText: { color: '#051F20', fontSize: 13, fontWeight: '700' },
+    participantsText: { color: 'rgba(255,255,255,0.75)', fontSize: 12, marginTop: 4, lineHeight: 16 },
+    cancelRideBtn: {
+        backgroundColor: 'rgba(180,60,60,0.1)', borderRadius: 10,
+        paddingHorizontal: 16, paddingVertical: 8, alignItems: 'center',
+        borderWidth: 1, borderColor: 'rgba(180,60,60,0.3)',
+    },
+    cancelRideBtnText: { color: '#E07070', fontSize: 12, fontWeight: '700' },
+
+    // ── Pending requests banner ─────────────────────
+    pendingRequestsBanner: {
+        backgroundColor: '#0B2B26',
+        borderTopWidth: 1, borderTopColor: 'rgba(142,182,155,0.2)',
+        paddingHorizontal: 16, paddingVertical: 12, gap: 8,
+    },
+    pendingRequestsTitle: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
+    pendingReqRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    pendingReqDest: { color: 'rgba(255,255,255,0.8)', fontSize: 13, flex: 1, marginRight: 8 },
+    pendingReqStatus: { color: '#8EB69B', fontSize: 11, fontWeight: '600', textTransform: 'uppercase' },
 
     // ── Availability toggle ──────────────────────────
     availRow: {

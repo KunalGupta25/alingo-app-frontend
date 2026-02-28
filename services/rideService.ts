@@ -82,6 +82,12 @@ export const rideService = {
         return response.data as { message: string; status?: string; votes?: number; needed?: number };
     },
 
+    cancelRide: async (ride_id: string) => {
+        const headers = await getAuthHeader();
+        const response = await api.post('/rides/cancel', { ride_id }, { headers });
+        return response.data as { message: string };
+    },
+
     getMyActiveRide: async () => {
         const headers = await getAuthHeader();
         const response = await api.get('/rides/my-active', { headers });
