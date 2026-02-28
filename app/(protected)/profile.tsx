@@ -148,6 +148,11 @@ export default function ProfileScreen() {
                                 <Text style={s.verifiedText}>✅ Verified</Text>
                             </View>
                         )}
+                        {profile.gender && (
+                            <Text style={{ color: C.textMuted, fontSize: 13, textTransform: 'capitalize' }}>
+                                • {profile.gender}
+                            </Text>
+                        )}
                     </View>
                     <Stars rating={profile.rating} />
                     <Text style={s.matchText}>🤝 {profile.total_buddy_matches} buddy matches</Text>

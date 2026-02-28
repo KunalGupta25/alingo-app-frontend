@@ -17,6 +17,7 @@ export type MyProfile = {
     verification_status: string;
     rides_completed: number;
     reviews_count: number;
+    gender?: string;
 };
 
 export type RideHistoryItem = {

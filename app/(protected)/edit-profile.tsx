@@ -84,6 +84,11 @@ export default function EditProfileScreen() {
                         <Text style={s.fieldLabel}>Phone Number</Text>
                         <Text style={s.readOnlyText}>{profile.phone || 'Not provided'}</Text>
                     </View>
+
+                    <View style={s.readOnlyField}>
+                        <Text style={s.fieldLabel}>Gender</Text>
+                        <Text style={s.readOnlyText}>{profile.gender ? profile.gender.charAt(0).toUpperCase() + profile.gender.slice(1) : 'Not provided'}</Text>
+                    </View>
                 </View>
 
                 {/* ── Editable Section ─────────────────────── */}
