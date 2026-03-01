@@ -1,59 +1,58 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    Modal,
     Platform,
     ScrollView,
     StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
 import * as Location from 'expo-location';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { rideService, getOSRMPolyline } from '../../services/rideService';
 
 // ── Palette ───────────────────────────────────────────────
 const C = {
-    bg: '#051F20',
-    card: '#0B2B26',
-    cardBorder: 'rgba(142,182,155,0.15)',
-    accent: '#8EB69B',
-    accentDark: '#235347',
+    bg: '#0b1416',
+    card: '#0F3D3E',
+    cardBorder: 'rgba(79, 209, 197, 0.1)',
+    accent: '#4fd1c5',
+    accentDark: 'rgba(79, 209, 197, 0.2)',
     text: '#FFFFFF',
-    textMuted: 'rgba(255,255,255,0.5)',
-    inputBg: '#163832',
-    placeholder: 'rgba(255,255,255,0.4)',
-    divider: 'rgba(142,182,155,0.12)',
-    btnBg: '#8EB69B',
-    btnText: '#051F20',
-    btnDisabled: 'rgba(142,182,155,0.3)',
+    textMuted: 'rgba(255,255,255,0.6)',
+    inputBg: 'rgba(11, 20, 22, 0.5)',
+    btnBg: '#A3e635',
+    btnText: '#0b1416',
+    btnDisabled: 'rgba(163, 230, 53, 0.3)',
     star: '#F4C430',
-    modalBg: '#0B2B26',
+    placeholder: 'rgba(255,255,255,0.4)',
+    divider: 'rgba(79, 209, 197, 0.12)',
+    modalBg: '#0F3D3E',
 };
 
-// Today's date as YYYY-MM-DD (rides are always for today)
-const todayStr = () => new Date().toISOString().split('T')[0];
+const todayStr = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 export default function FindBuddyScreen() {
     const router = useRouter();
+    const params = useLocalSearchParams();
 
-    // Destination
-    const [destination, setDestination] = useState<{
-        name: string; coordinates: [number, number];
-    } | null>(null);
-    const [destQuery, setDestQuery] = useState('');
-    const [suggestions, setSuggestions] = useState<any[]>([]);
-    const [searching, setSearching] = useState(false);
-    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Extracted from router params passed by home.tsx
+    const destName = (params.destName as string) || 'Choose Destination';
+    const destLat = parseFloat(params.destLat as string);
+    const destLon = parseFloat(params.destLon as string);
 
-    // Search results
+    // Gender Filter state
+    const [genderFilter, setGenderFilter] = useState<'All' | 'Male' | 'Female'>('All');
+
+    // Search results states
     const [results, setResults] = useState<any[] | null>(null);
     const [loading, setLoading] = useState(false);
-
-    // Per-ride join button state: 'idle' | 'loading' | 'PENDING' | 'APPROVED' | 'REJECTED'
     const [requestStates, setRequestStates] = useState<Record<string, string>>({});
 
     const handleRequestJoin = async (ride_id: string) => {
@@ -68,42 +67,13 @@ export default function FindBuddyScreen() {
         }
     };
 
-    // ── Nominatim destination search ──────────────────────
-    const searchDestination = useCallback(async (text: string) => {
-        if (!text.trim()) { setSuggestions([]); return; }
-        setSearching(true);
-        try {
-            const res = await fetch(
-                `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(text)}&format=json&limit=6&addressdetails=1&dedupe=1`,
-                { headers: { 'Accept-Language': 'en', 'User-Agent': 'AlingoApp/1.0' } },
-            );
-            setSuggestions(await res.json());
-        } catch { setSuggestions([]); }
-        finally { setSearching(false); }
-    }, []);
+    // ── Search on load or filter change ───────────────────
+    useEffect(() => {
+        if (!destLat || !destLon || isNaN(destLat)) return;
+        runSearch();
+    }, [genderFilter, destLat, destLon]);
 
-    const handleDestChange = (text: string) => {
-        setDestQuery(text);
-        setDestination(null);
-        setResults(null);
-        if (debounceRef.current) clearTimeout(debounceRef.current);
-        if (!text.trim()) { setSuggestions([]); return; }
-        debounceRef.current = setTimeout(() => searchDestination(text), 350);
-    };
-
-    const selectDest = (item: any) => {
-        const name = item.display_name.split(',')[0];
-        setDestination({ name, coordinates: [parseFloat(item.lon), parseFloat(item.lat)] });
-        setDestQuery(name);
-        setSuggestions([]);
-        setResults(null);
-    };
-
-    // ── Search handler ────────────────────────────────────
-    const isReady = !!destination;
-
-    const handleSearch = async () => {
-        if (!isReady || !destination) return;
+    const runSearch = async () => {
         setLoading(true);
         setResults(null);
         try {
@@ -112,32 +82,24 @@ export default function FindBuddyScreen() {
 
             if (status === 'granted') {
                 let pos = await Location.getLastKnownPositionAsync({});
-                if (!pos) {
-                    pos = await Promise.race([
-                        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low }),
-                        new Promise<null>(r => setTimeout(() => r(null), 10000)),
-                    ]) as any;
-                }
+                if (!pos) pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
                 if (pos) {
                     userLat = pos.coords.latitude;
                     userLng = pos.coords.longitude;
                 }
             }
 
-            // Best-effort polyline for better matching
             let polyline = '';
             if (userLat && userLng) {
-                polyline = await getOSRMPolyline(
-                    userLat, userLng,
-                    destination.coordinates[1],
-                    destination.coordinates[0],
-                );
+                polyline = await getOSRMPolyline(userLat, userLng, destLat, destLon);
             }
 
+            // Using the rideService search endpoint
             const matches = await rideService.searchRides({
                 user_location: [userLng, userLat],
                 ride_date: todayStr(),
                 route_polyline: polyline,
+                gender_filter: genderFilter,
             });
 
             setResults(matches);
@@ -148,92 +110,68 @@ export default function FindBuddyScreen() {
         }
     };
 
-    // ── Star rating renderer ──────────────────────────────
-    const renderStars = (rating: number) => {
-        const full = Math.floor(rating);
-        const half = rating - full >= 0.5;
-        const empty = 5 - full - (half ? 1 : 0);
-        return '★'.repeat(full) + (half ? '½' : '') + '☆'.repeat(empty);
-    };
+    const renderStars = (rating: number) => '★'.repeat(Math.ceil(rating));
 
-    // ── Render ────────────────────────────────────────────
     return (
         <View style={s.root}>
-            <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+            {/* ── Fixed Header ── */}
+            <View style={s.header}>
+                <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
+                    <Ionicons name="arrow-back" size={24} color={C.text} />
+                </TouchableOpacity>
+                <Text style={s.headerTitle} numberOfLines={1}>{destName}</Text>
+                <TouchableOpacity style={s.filterBtn}>
+                    <Ionicons name="options" size={24} color={C.text} />
+                </TouchableOpacity>
+            </View>
 
-                {/* Header */}
-                <View style={s.header}>
-                    <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-                        <Text style={s.backText}>←</Text>
-                    </TouchableOpacity>
-                    <Text style={s.headerTitle}>Find a Buddy</Text>
+            <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+
+                {/* ── Route Selection Fields ── */}
+                <View style={s.routeBox}>
+                    <View style={s.routeField}>
+                        <Ionicons name="locate" size={20} color={C.accent} style={{ marginRight: 8 }} />
+                        <Text style={s.routeText}>Current Location</Text>
+                    </View>
+                    <View style={[s.routeField, { marginTop: 8 }]}>
+                        <Ionicons name="search" size={20} color={C.textMuted} style={{ marginRight: 8 }} />
+                        <Text style={[s.routeText, { color: '#fff' }]} numberOfLines={1}>{destName}</Text>
+                        <TouchableOpacity onPress={() => router.back()}>
+                            <Ionicons name="close-circle-outline" size={20} color={C.textMuted} />
+                        </TouchableOpacity>
+                    </View>
                 </View>
 
-                {/* ── Destination search ──────────────────── */}
-                <View style={s.section}>
-                    <Text style={s.label}>📍  Where are you going?</Text>
-                    <View style={s.searchBar}>
-                        <TextInput
-                            style={s.searchInput}
-                            placeholder="Search destination…"
-                            placeholderTextColor={C.placeholder}
-                            value={destQuery}
-                            onChangeText={handleDestChange}
-                            autoCorrect={false}
-                        />
-                        {searching && <ActivityIndicator size="small" color={C.accent} />}
-                        {destQuery.length > 0 && !searching && (
-                            <TouchableOpacity onPress={() => { setDestQuery(''); setDestination(null); setSuggestions([]); setResults(null); }}>
-                                <Text style={s.clearBtn}>✕</Text>
-                            </TouchableOpacity>
-                        )}
-                    </View>
-
-                    {suggestions.length > 0 && (
-                        <View style={s.suggBox}>
-                            {suggestions.map((item, i) => (
+                {/* ── Gender Filter ── */}
+                <View style={s.genderSection}>
+                    <Text style={s.sectionSubtitle}>FILTER BY GENDER</Text>
+                    <View style={s.genderTabs}>
+                        {(['All', 'Male', 'Female'] as const).map(tab => {
+                            const active = genderFilter === tab;
+                            return (
                                 <TouchableOpacity
-                                    key={item.place_id ?? i}
-                                    style={[s.suggItem, i < suggestions.length - 1 && s.suggDivider]}
-                                    onPress={() => selectDest(item)} activeOpacity={0.7}
+                                    key={tab}
+                                    onPress={() => setGenderFilter(tab)}
+                                    style={[s.genderTab, active && s.genderTabActive]}
                                 >
-                                    <Text style={s.suggIcon}>📍</Text>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={s.suggName} numberOfLines={1}>{item.display_name.split(',')[0]}</Text>
-                                        <Text style={s.suggSub} numberOfLines={1}>{item.display_name.split(',').slice(1, 3).join(',')}</Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                        <Ionicons
+                                            name={tab === 'All' ? 'people' : tab === 'Male' ? 'man' : 'woman'}
+                                            size={16}
+                                            color={active ? C.btnText : C.textMuted}
+                                        />
+                                        <Text style={[s.genderTabText, active && s.genderTabTextActive]}>
+                                            {tab}
+                                        </Text>
                                     </View>
                                 </TouchableOpacity>
-                            ))}
-                        </View>
-                    )}
-
-                    {destination && (
-                        <View style={s.confirmedCard}>
-                            <Text>✅</Text>
-                            <Text style={s.confirmedText}>{destination.name}</Text>
-                        </View>
-                    )}
+                            );
+                        })}
+                    </View>
                 </View>
 
-
-                {/* ── Search button ────────────────────────── */}
-                <TouchableOpacity
-                    style={[s.searchBtn, (!isReady || loading) && s.searchBtnOff]}
-                    onPress={handleSearch}
-                    disabled={!isReady || loading}
-                    activeOpacity={0.8}
-                >
-                    {loading
-                        ? <ActivityIndicator color={C.btnText} />
-                        : <Text style={[s.searchBtnText, !isReady && { color: 'rgba(5,31,32,0.4)' }]}>🔍  Find Buddies</Text>
-                    }
-                </TouchableOpacity>
-
-                {isReady && !loading && (
-                    <Text style={s.hint}>Searching within 2km of your location</Text>
-                )}
-
-                {/* ── Results ──────────────────────────────── */}
+                {/* ── Available Rides List ── */}
+                <Text style={s.sectionTitle}>Available Rides</Text>
                 {results !== null && (
                     <View style={s.resultsSection}>
                         <Text style={s.resultsHeader}>
@@ -250,6 +188,12 @@ export default function FindBuddyScreen() {
                                     No active rides within 2km for this date.{'\n'}
                                     Be the first to create one!
                                 </Text>
+                                <TouchableOpacity
+                                    style={s.createRideBtn}
+                                    onPress={() => router.push('/create-ride')}
+                                >
+                                    <Text style={s.createRideBtnText}>Offer a Ride</Text>
+                                </TouchableOpacity>
                             </View>
                         )}
 
@@ -351,11 +295,32 @@ const s = StyleSheet.create({
         paddingHorizontal: 20, paddingBottom: 20, gap: 16,
     },
     backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-    backText: { color: C.accent, fontSize: 26, fontWeight: '600' },
-    headerTitle: { color: C.text, fontSize: 22, fontWeight: '700' },
+    backIcon: { color: C.accent, fontSize: 26, fontWeight: '600' },
+    headerTitle: { color: C.text, fontSize: 22, fontWeight: '700', flex: 1, textAlign: 'center' },
+    filterBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+    filterIcon: { color: C.accent, fontSize: 22 },
 
-    section: { marginHorizontal: 20, marginBottom: 20 },
-    label: { color: C.accent, fontSize: 13, fontWeight: '700', marginBottom: 10, letterSpacing: 0.5 },
+    routeBox: { marginHorizontal: 20, marginBottom: 20 },
+    routeField: {
+        flexDirection: 'row', alignItems: 'center',
+        backgroundColor: C.inputBg, borderRadius: 12,
+        paddingHorizontal: 14, paddingVertical: 14, gap: 10,
+        borderWidth: 1, borderColor: C.cardBorder,
+    },
+    routeIconAim: { color: C.accent, fontSize: 18 },
+    routeIconSearch: { fontSize: 16 },
+    routeText: { color: C.textMuted, fontSize: 15, flex: 1 },
+    routeClose: { color: C.accent, fontSize: 16, fontWeight: '600', paddingHorizontal: 4 },
+
+    genderSection: { marginHorizontal: 20, marginBottom: 24 },
+    sectionSubtitle: { color: C.accent, fontSize: 13, fontWeight: '700', marginBottom: 12, letterSpacing: 0.5 },
+    genderTabs: { flexDirection: 'row', backgroundColor: C.inputBg, borderRadius: 12, padding: 4 },
+    genderTab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
+    genderTabActive: { backgroundColor: C.accentDark },
+    genderTabText: { color: C.textMuted, fontSize: 14, fontWeight: '600' },
+    genderTabTextActive: { color: C.text, fontWeight: '700' },
+
+    sectionTitle: { color: C.text, fontSize: 20, fontWeight: '700', marginHorizontal: 20 },
 
     searchBar: {
         flexDirection: 'row', alignItems: 'center',
@@ -410,6 +375,8 @@ const s = StyleSheet.create({
     emptyIcon: { fontSize: 40 },
     emptyTitle: { color: C.text, fontSize: 18, fontWeight: '700' },
     emptyBody: { color: C.textMuted, fontSize: 14, textAlign: 'center', lineHeight: 20 },
+    createRideBtn: { marginTop: 12, backgroundColor: C.btnBg, paddingVertical: 12, paddingHorizontal: 28, borderRadius: 12 },
+    createRideBtnText: { color: C.btnText, fontSize: 15, fontWeight: '700' },
 
     rideCard: {
         backgroundColor: C.card, borderRadius: 16,

@@ -82,7 +82,7 @@ export default function LoginScreen() {
     return (
         <ScreenWrapper scrollable>
             <LinearGradient
-                colors={[COLORS.primaryDark, COLORS.dark, COLORS.mediumDark]}
+                colors={['#174A4C', '#0B1416']}
                 style={StyleSheet.absoluteFillObject}
             />
 
@@ -171,99 +171,105 @@ const styles = StyleSheet.create({
     },
     backText: {
         fontSize: 16,
-        color: COLORS.lightGreen,
+        color: '#4FD1C5',
         fontWeight: '600',
     },
     logo: {
         fontSize: 36,
         fontWeight: 'bold',
-        color: COLORS.text,
+        color: '#4FD1C5',
         letterSpacing: 2,
     },
     card: {
-        backgroundColor: COLORS.lightGreen,
+        backgroundColor: '#0B2728',
         borderTopLeftRadius: BORDER_RADIUS.xl,
         borderTopRightRadius: BORDER_RADIUS.xl,
         paddingHorizontal: SPACING.xl,
         paddingTop: SPACING.xxl,
         paddingBottom: SPACING.xxl + SPACING.lg,
         minHeight: 400,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(79, 209, 197, 0.15)',
     },
     title: {
         fontSize: 28,
         fontWeight: 'bold',
-        color: COLORS.inputText,
+        color: '#FFFFFF',
         marginBottom: SPACING.sm,
     },
     subtitle: {
         fontSize: 16,
-        color: COLORS.inputText,
-        opacity: 0.8,
-        marginBottom: SPACING.xl,
+        color: '#8EB69B',
+        marginBottom: SPACING.xxl,
     },
     inputGroup: {
         marginBottom: SPACING.xl,
     },
     label: {
-        fontSize: 15,
+        fontSize: 14,
         fontWeight: '600',
-        color: COLORS.inputText,
+        color: '#4FD1C5',
         marginBottom: SPACING.sm,
     },
     phoneInputContainer: {
         flexDirection: 'row',
-        backgroundColor: COLORS.inputBackground,
+        backgroundColor: 'rgba(255,255,255,0.05)',
         borderRadius: BORDER_RADIUS.md,
+        borderWidth: 1,
+        borderColor: 'rgba(79, 209, 197, 0.2)',
         overflow: 'hidden',
     },
     countryCodeContainer: {
-        width: 70,
+        paddingHorizontal: SPACING.md,
         justifyContent: 'center',
-        alignItems: 'center',
         borderRightWidth: 1,
-        borderRightColor: 'rgba(0,0,0,0.1)',
+        borderRightColor: 'rgba(79, 209, 197, 0.2)',
     },
     countryCodeInput: {
         fontSize: 16,
-        color: COLORS.inputText,
         fontWeight: '600',
-        textAlign: 'center',
-        paddingVertical: SPACING.md + 2,
+        color: '#FFFFFF',
+        paddingVertical: SPACING.md,
     },
     phoneInput: {
         flex: 1,
         paddingHorizontal: SPACING.md,
-        paddingVertical: SPACING.md + 2,
+        paddingVertical: SPACING.md,
         fontSize: 16,
-        color: COLORS.inputText,
+        color: '#FFFFFF',
     },
     button: {
-        backgroundColor: COLORS.button,
-        borderRadius: BORDER_RADIUS.md,
-        paddingVertical: SPACING.md + 6,
+        backgroundColor: '#4FD1C5',
+        paddingVertical: SPACING.md,
+        borderRadius: BORDER_RADIUS.lg,
         alignItems: 'center',
         marginTop: SPACING.md,
+        shadowColor: '#4FD1C5',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 5,
     },
     buttonDisabled: {
-        opacity: 0.6,
+        opacity: 0.5,
     },
     buttonText: {
-        color: COLORS.buttonText,
+        color: '#0B1416',
         fontSize: 18,
-        fontWeight: '600',
+        fontWeight: 'bold',
     },
     footer: {
         flexDirection: 'row',
         justifyContent: 'center',
-        marginTop: SPACING.lg,
+        marginTop: SPACING.xxl,
     },
     footerText: {
-        color: COLORS.inputText,
-        fontSize: 15,
+        fontSize: 14,
+        color: '#8EB69B',
     },
     footerLink: {
-        color: COLORS.primaryDark,
-        fontSize: 15,
+        fontSize: 14,
         fontWeight: 'bold',
+        color: '#A3e635',
     },
 });

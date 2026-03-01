@@ -11,25 +11,29 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import { profileService, MyProfile, RideHistoryItem } from '../../services/profileService';
 
 // ── Palette ───────────────────────────────────────────────
 const C = {
-    bg: '#051F20',
-    card: '#0B2B26',
-    cardBorder: 'rgba(142,182,155,0.15)',
-    accent: '#8EB69B',
-    accentDark: '#235347',
+    bg: '#0b1416',
+    card: '#0F3D3E',
+    cardBorder: 'rgba(79, 209, 197, 0.15)',
+    accent: '#4fd1c5',
+    accentDark: 'rgba(79, 209, 197, 0.2)',
     text: '#FFFFFF',
     textMuted: 'rgba(255,255,255,0.5)',
-    divider: 'rgba(142,182,155,0.12)',
-    btnBg: '#8EB69B',
-    btnText: '#051F20',
+    divider: 'rgba(79, 209, 197, 0.12)',
+    navActiveIcon: '#A3E635',
+    navInactiveIcon: '#5F6F73',
+    btnBg: '#A3e635',
+    btnText: '#0b1416',
     danger: '#E07070',
     star: '#F4C430',
-    inputBg: '#163832',
+    inputBg: 'rgba(11, 20, 22, 0.5)',
 };
 
 const ACTIVE_COLOR = '#4CAF82';
@@ -41,18 +45,21 @@ const STATUS_COLORS: Record<string, string> = {
 // ── Stars helper ──────────────────────────────────────────
 const Stars = ({ rating }: { rating: number }) => {
     const full = Math.floor(rating);
-    const empty = 5 - full;
+    const hasHalf = rating - full >= 0.5;
+    const empty = 5 - full - (hasHalf ? 1 : 0);
     return (
-        <Text style={{ color: C.star, fontSize: 14 }}>
-            {'★'.repeat(full)}{'☆'.repeat(empty)}
-            <Text style={{ color: C.textMuted, fontSize: 13 }}> {rating.toFixed(1)}</Text>
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+            {[...Array(full)].map((_, i) => <Ionicons key={`f-${i}`} name="star" size={14} color={C.star} />)}
+            {hasHalf && <Ionicons name="star-half" size={14} color={C.star} />}
+            {[...Array(empty)].map((_, i) => <Ionicons key={`e-${i}`} name="star-outline" size={14} color={C.star} />)}
+            <Text style={{ color: C.textMuted, fontSize: 13, marginLeft: 4 }}> {rating.toFixed(1)}</Text>
+        </View>
     );
 };
 
 // ── Ride row ──────────────────────────────────────────────
-const RideRow = ({ item }: { item: RideHistoryItem }) => (
-    <View style={s.rideRow}>
+const RideRow = ({ item, onPress }: { item: RideHistoryItem; onPress: () => void }) => (
+    <TouchableOpacity style={s.rideRow} onPress={onPress} activeOpacity={0.6}>
         <View style={{ flex: 1, gap: 3 }}>
             <Text style={s.rideDestName} numberOfLines={1}>{item.destination_name || '—'}</Text>
             <Text style={s.rideMeta}>
@@ -60,12 +67,15 @@ const RideRow = ({ item }: { item: RideHistoryItem }) => (
                 {item.participant_count} rider{item.participant_count !== 1 ? 's' : ''}
             </Text>
         </View>
-        <View style={[s.statusBadge, { borderColor: STATUS_COLORS[item.status] ?? C.cardBorder }]}>
-            <Text style={[s.statusText, { color: STATUS_COLORS[item.status] ?? C.textMuted }]}>
-                {item.status}
-            </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={[s.statusBadge, { borderColor: STATUS_COLORS[item.status] ?? C.cardBorder }]}>
+                <Text style={[s.statusText, { color: STATUS_COLORS[item.status] ?? C.textMuted }]}>
+                    {item.status}
+                </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={C.textMuted} />
         </View>
-    </View>
+    </TouchableOpacity>
 );
 
 // ── Screen ────────────────────────────────────────────────
@@ -125,106 +135,129 @@ export default function ProfileScreen() {
     const ridesToShow = tab === 'created' ? (rides?.created ?? []) : (rides?.joined ?? []);
 
     return (
-        <ScrollView style={s.root} contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+        <View style={s.root}>
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
 
-            {/* ── Header ─────────────────────────────────── */}
-            <View style={s.header}>
-                <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-                    <Text style={s.backText}>←</Text>
-                </TouchableOpacity>
-                <Text style={s.headerTitle}>My Profile</Text>
-            </View>
-
-            {/* ── Avatar + Identity ──────────────────────── */}
-            <View style={s.identityCard}>
-                <View style={s.avatar}>
-                    <Text style={s.avatarText}>{profile.full_name?.[0]?.toUpperCase() ?? '?'}</Text>
+                {/* ── Header ─────────────────────────────────── */}
+                <View style={s.header}>
+                    <Text style={s.headerTitle}>My Profile</Text>
                 </View>
-                <View style={{ flex: 1, gap: 5 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <Text style={s.fullName}>{profile.full_name || 'Alingo User'}</Text>
-                        {isVerified && (
-                            <View style={s.verifiedBadge}>
-                                <Text style={s.verifiedText}>✅ Verified</Text>
-                            </View>
-                        )}
-                        {profile.gender && (
-                            <Text style={{ color: C.textMuted, fontSize: 13, textTransform: 'capitalize' }}>
-                                • {profile.gender}
-                            </Text>
-                        )}
+
+                {/* ── Avatar + Identity ──────────────────────── */}
+                <View style={s.identityCard}>
+                    <View style={s.avatar}>
+                        <Text style={s.avatarText}>{profile.full_name?.[0]?.toUpperCase() ?? '?'}</Text>
                     </View>
-                    <Stars rating={profile.rating} />
-                    <Text style={s.matchText}>🤝 {profile.total_buddy_matches} buddy matches</Text>
-                </View>
-            </View>
-
-            {/* ── Stats row ──────────────────────────────── */}
-            <View style={s.statsRow}>
-                <View style={s.statCard}>
-                    <Text style={s.statNum}>{profile.rides_completed}</Text>
-                    <Text style={s.statLabel}>Rides{'\n'}Completed</Text>
-                </View>
-                <View style={[s.statCard, s.statCardMid]}>
-                    <Text style={s.statNum}>{profile.reviews_count}</Text>
-                    <Text style={s.statLabel}>Reviews{'\n'}Received</Text>
-                </View>
-                <View style={s.statCard}>
-                    <Text style={[s.statNum, { color: C.star }]}>{profile.rating.toFixed(1)}</Text>
-                    <Text style={s.statLabel}>Average{'\n'}Rating</Text>
-                </View>
-            </View>
-
-            {/* ── Ride history tabs ──────────────────────── */}
-            <View style={s.section}>
-                <Text style={s.sectionTitle}>📋  Ride History</Text>
-                <View style={s.tabRow}>
-                    <TouchableOpacity
-                        style={[s.tab, tab === 'created' && s.tabActive]}
-                        onPress={() => setTab('created')}
-                    >
-                        <Text style={[s.tabText, tab === 'created' && s.tabTextActive]}>
-                            Created ({rides?.created.length ?? 0})
-                        </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[s.tab, tab === 'joined' && s.tabActive]}
-                        onPress={() => setTab('joined')}
-                    >
-                        <Text style={[s.tabText, tab === 'joined' && s.tabTextActive]}>
-                            Joined ({rides?.joined.length ?? 0})
-                        </Text>
-                    </TouchableOpacity>
-                </View>
-
-                {ridesToShow.length === 0 ? (
-                    <Text style={s.emptyText}>No rides yet.</Text>
-                ) : (
-                    ridesToShow.map((item, i) => (
-                        <View key={item.ride_id}>
-                            {i > 0 && <View style={s.divider} />}
-                            <RideRow item={item} />
+                    <View style={{ flex: 1, gap: 5 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <Text style={s.fullName}>{profile.full_name || 'Alingo User'}</Text>
+                            {isVerified && (
+                                <View style={s.verifiedBadge}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                        <Ionicons name="checkmark-circle" size={14} color={ACTIVE_COLOR} />
+                                        <Text style={s.verifiedText}>Verified</Text>
+                                    </View>
+                                </View>
+                            )}
+                            {profile.gender && (
+                                <Text style={{ color: C.textMuted, fontSize: 13, textTransform: 'capitalize' }}>
+                                    • {profile.gender}
+                                </Text>
+                            )}
                         </View>
-                    ))
-                )}
-            </View>
+                        <Stars rating={profile.rating} />
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Ionicons name="people" size={14} color={C.textMuted} />
+                            <Text style={s.matchText}>{profile.total_buddy_matches} buddy matches</Text>
+                        </View>
+                    </View>
+                </View>
 
-            {/* ── Edit section (Button) ──────────────────────── */}
-            <TouchableOpacity
-                style={s.editProfileBtn}
-                onPress={() => router.push('/(protected)/edit-profile')}
-                activeOpacity={0.8}
-            >
-                <Text style={s.editProfileBtnText}>✏️ Edit Profile</Text>
-            </TouchableOpacity>
+                {/* ── Stats row ──────────────────────────────── */}
+                <View style={s.statsRow}>
+                    <View style={s.statCard}>
+                        <Text style={s.statNum}>{profile.rides_completed}</Text>
+                        <Text style={s.statLabel}>Rides{'\n'}Completed</Text>
+                    </View>
+                    <View style={[s.statCard, s.statCardMid]}>
+                        <Text style={s.statNum}>{profile.reviews_count}</Text>
+                        <Text style={s.statLabel}>Reviews{'\n'}Received</Text>
+                    </View>
+                    <View style={s.statCard}>
+                        <Text style={[s.statNum, { color: C.star }]}>{profile.rating.toFixed(1)}</Text>
+                        <Text style={s.statLabel}>Average{'\n'}Rating</Text>
+                    </View>
+                </View>
 
-            {/* ── Logout ─────────────────────────────────── */}
-            <TouchableOpacity style={s.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
-                <Text style={s.logoutText}>Log Out</Text>
-            </TouchableOpacity>
+                {/* ── Ride history tabs ──────────────────────── */}
+                <View style={s.section}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Ionicons name="list" size={18} color={C.accent} />
+                        <Text style={s.sectionTitle}>Ride History</Text>
+                    </View>
+                    <View style={s.tabRow}>
+                        <TouchableOpacity
+                            style={[s.tab, tab === 'created' && s.tabActive]}
+                            onPress={() => setTab('created')}
+                        >
+                            <Text style={[s.tabText, tab === 'created' && s.tabTextActive]}>
+                                Created ({rides?.created.length ?? 0})
+                            </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[s.tab, tab === 'joined' && s.tabActive]}
+                            onPress={() => setTab('joined')}
+                        >
+                            <Text style={[s.tabText, tab === 'joined' && s.tabTextActive]}>
+                                Joined ({rides?.joined.length ?? 0})
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
 
-            <View style={{ height: 48 }} />
-        </ScrollView>
+                    {ridesToShow.length === 0 ? (
+                        <Text style={s.emptyText}>No rides yet.</Text>
+                    ) : (
+                        ridesToShow.map((item, i) => (
+                            <View key={item.ride_id}>
+                                {i > 0 && <View style={s.divider} />}
+                                <RideRow item={item} onPress={() => router.push({ pathname: '/(protected)/ride-details', params: { ride_id: item.ride_id } })} />
+                            </View>
+                        ))
+                    )}
+                </View>
+
+                {/* ── Settings (Button) ──────────────────────── */}
+                <TouchableOpacity
+                    style={s.editProfileBtn}
+                    onPress={() => router.push('/(protected)/settings')}
+                    activeOpacity={0.8}
+                >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Ionicons name="settings-outline" size={16} color={C.text} />
+                        <Text style={s.editProfileBtnText}>Settings</Text>
+                    </View>
+                </TouchableOpacity>
+
+                {/* ── Logout ─────────────────────────────────── */}
+                <TouchableOpacity style={s.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
+                    <Text style={s.logoutText}>Log Out</Text>
+                </TouchableOpacity>
+
+                <View style={{ height: 80 }} />
+            </ScrollView>
+
+            {/* ── Bottom nav bar ── */}
+            <LinearGradient colors={['#0A1E1F', '#071213']} style={s.navBar}>
+                <TouchableOpacity style={s.navItem} onPress={() => router.replace('/home')}>
+                    <Ionicons name="home" size={24} color={C.navInactiveIcon} />
+                </TouchableOpacity>
+                <TouchableOpacity style={s.navItem}>
+                    <View style={s.navIconWrap}>
+                        <Ionicons name="person" size={24} color={C.navActiveIcon} />
+                    </View>
+                </TouchableOpacity>
+            </LinearGradient>
+        </View>
     );
 }
 
@@ -233,10 +266,28 @@ const s = StyleSheet.create({
     root: { flex: 1, backgroundColor: C.bg },
     scroll: { paddingBottom: 40 },
 
+    // Nav Bar
+    navBar: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-around',
+        paddingHorizontal: 32,
+        paddingTop: 12,
+        paddingBottom: Platform.OS === 'ios' ? 28 : 16,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(79,209,197,0.12)',
+    },
+    navItem: { alignItems: 'center', justifyContent: 'center', minWidth: 56 },
+    navIconWrap: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+
     header: {
-        flexDirection: 'row', alignItems: 'center',
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
         paddingTop: Platform.OS === 'android' ? 44 : 60,
-        paddingHorizontal: 20, paddingBottom: 20, gap: 16,
+        paddingHorizontal: 20, paddingBottom: 20,
     },
     backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
     backText: { color: C.accent, fontSize: 26, fontWeight: '600' },

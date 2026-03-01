@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView, Alert, Switch, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { profileService, MyProfile } from '../../services/profileService';
 import { COLORS as C } from '../../constants/theme';
 
@@ -63,7 +64,7 @@ export default function EditProfileScreen() {
             {/* Header */}
             <View style={s.header}>
                 <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-                    <Text style={s.backText}>←</Text>
+                    <Ionicons name="arrow-back" size={24} color={C.text} />
                 </TouchableOpacity>
                 <Text style={s.headerTitle}>Edit Profile</Text>
             </View>

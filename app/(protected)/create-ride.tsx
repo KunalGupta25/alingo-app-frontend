@@ -2,8 +2,6 @@ import React, { useCallback, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    FlatList,
-    Modal,
     Platform,
     ScrollView,
     StyleSheet,
@@ -14,64 +12,66 @@ import {
 } from 'react-native';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
-import { rideService, getOSRMPolyline } from '../../services/rideService';
+import { Ionicons } from '@expo/vector-icons';
+import MapView, { Marker, Polyline } from 'react-native-maps';
+import { rideService, getOSRMPolyline, decodePolyline } from '../../services/rideService';
+// @ts-ignore
+import DateTimePicker from '@react-native-community/datetimepicker';
 
-// ── Palette ───────────────────────────────────────────────
 const C = {
-    bg: '#051F20',
-    card: '#0B2B26',
-    cardBorder: 'rgba(142,182,155,0.15)',
-    accent: '#8EB69B',
-    accentDark: '#235347',
+    bg: '#0b1416',
+    card: '#0F3D3E',
+    cardBorder: 'rgba(79, 209, 197, 0.15)',
+    accent: '#4fd1c5',
+    accentDark: 'rgba(79, 209, 197, 0.2)',
     text: '#FFFFFF',
-    textMuted: 'rgba(255,255,255,0.5)',
-    inputBg: '#163832',
+    textMuted: 'rgba(255,255,255,0.6)',
+    inputBg: 'rgba(11, 20, 22, 0.5)',
+    btnBg: '#A3e635',
+    btnText: '#0b1416',
+    divider: 'rgba(79, 209, 197, 0.12)',
     placeholder: 'rgba(255,255,255,0.4)',
-    divider: 'rgba(142,182,155,0.12)',
-    btnBg: '#8EB69B',
-    btnText: '#051F20',
-    btnDisabled: 'rgba(142,182,155,0.3)',
-    modalBg: '#0B2B26',
 };
 
-// ── Time picker helpers ───────────────────────────────────
-const HOURS = Array.from({ length: 24 }, (_, i) => i);
-const MINS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+const todayStr = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
-// Today's date as YYYY-MM-DD (used automatically)
-const todayStr = () => new Date().toISOString().split('T')[0];
-
-// ──────────────────────────────────────────────────────────
 export default function CreateRideScreen() {
     const router = useRouter();
 
-    // Destination
+    // Destination Search
     const [destination, setDestination] = useState<{
         name: string; coordinates: [number, number];
     } | null>(null);
     const [destQuery, setDestQuery] = useState('');
     const [suggestions, setSuggestions] = useState<any[]>([]);
     const [searching, setSearching] = useState(false);
+    const [routePoints, setRoutePoints] = useState<{ latitude: number, longitude: number }[]>([]);
+    const [originRegion, setOriginRegion] = useState<{ latitude: number, longitude: number } | null>(null);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-
-    // Time state
-    const [selHour, setSelHour] = useState(8);
-    const [selMin, setSelMin] = useState(0);
-    const [timeSet, setTimeSet] = useState(false);
-    const [showTimeModal, setShowTimeModal] = useState(false);
+    // Departure Time
+    const [timeType, setTimeType] = useState<'Now' | 'Schedule'>('Now');
+    const [scheduleTime, setScheduleTime] = useState(new Date());
+    const [showPicker, setShowPicker] = useState(false);
 
     // Seats
     const [seats, setSeats] = useState(1);
+
+    // Gender Preference
+    const [genderPref, setGenderPref] = useState<'Male' | 'Female' | 'Any'>('Any');
+
     const [loading, setLoading] = useState(false);
 
-    // ── Nominatim search ──────────────────────────────────
+    // ── Nominatim destination search ──────────────────────
     const searchDestination = useCallback(async (text: string) => {
         if (!text.trim()) { setSuggestions([]); return; }
         setSearching(true);
         try {
             const res = await fetch(
-                `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(text)}&format=json&limit=6&addressdetails=1&dedupe=1`,
+                `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(text)}&format=json&limit=5&addressdetails=1&dedupe=1`,
                 { headers: { 'Accept-Language': 'en', 'User-Agent': 'AlingoApp/1.0' } },
             );
             setSuggestions(await res.json());
@@ -87,22 +87,37 @@ export default function CreateRideScreen() {
         debounceRef.current = setTimeout(() => searchDestination(text), 350);
     };
 
-    const selectDest = (item: any) => {
+    const selectDest = async (item: any) => {
         const name = item.display_name.split(',')[0];
-        setDestination({ name, coordinates: [parseFloat(item.lon), parseFloat(item.lat)] });
+        const destLat = parseFloat(item.lat);
+        const destLon = parseFloat(item.lon);
+
+        setDestination({ name, coordinates: [destLon, destLat] });
         setDestQuery(name);
         setSuggestions([]);
+
+        // Fetch polyline for preview immediately
+        try {
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status === 'granted') {
+                let pos = await Location.getLastKnownPositionAsync({});
+                if (!pos) pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
+                if (pos) {
+                    setOriginRegion({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+                    const polyStr = await getOSRMPolyline(pos.coords.latitude, pos.coords.longitude, destLat, destLon);
+                    const pts = decodePolyline(polyStr);
+                    setRoutePoints(pts);
+                }
+            }
+        } catch (e) {
+            console.log('Preview map route failed', e);
+        }
     };
 
-    // ── Formatted labels ──────────────────────────────────
-    const timeLabel = timeSet
-        ? `${String(selHour).padStart(2, '0')}:${String(selMin).padStart(2, '0')}`
-        : 'Select time';
+    // ── Submit ─────────────────────────────────────────────
+    const isValid = !!destination && seats >= 1;
 
-    // ── Confirm (date is always today) ────────────────────
-    const isValid = !!destination && timeSet && seats >= 1;
-
-    const handleConfirm = async () => {
+    const handlePostRide = async () => {
         if (!isValid || !destination) return;
         setLoading(true);
         try {
@@ -110,12 +125,7 @@ export default function CreateRideScreen() {
             let polyline = '';
             if (status === 'granted') {
                 let pos = await Location.getLastKnownPositionAsync({});
-                if (!pos) {
-                    pos = await Promise.race([
-                        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low }),
-                        new Promise<null>(r => setTimeout(() => r(null), 10000)),
-                    ]) as any;
-                }
+                if (!pos) pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
                 if (pos) {
                     polyline = await getOSRMPolyline(
                         pos.coords.latitude, pos.coords.longitude,
@@ -124,17 +134,27 @@ export default function CreateRideScreen() {
                 }
             }
 
+            // Figure out time string
+            let rideTimeStr = '';
+            if (timeType === 'Now') {
+                const now = new Date();
+                rideTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+            } else {
+                rideTimeStr = `${String(scheduleTime.getHours()).padStart(2, '0')}:${String(scheduleTime.getMinutes()).padStart(2, '0')}`;
+            }
+
             const result = await rideService.createRide({
                 destination,
                 ride_date: todayStr(),
-                ride_time: `${String(selHour).padStart(2, '0')}:${String(selMin).padStart(2, '0')}`,
+                ride_time: rideTimeStr,
                 max_seats: seats,
                 route_polyline: polyline,
+                gender_preference: genderPref,
             });
 
             Alert.alert(
-                '🚗 Ride Created!',
-                `Your ride to ${result.destination} on ${result.ride_date} at ${result.ride_time} is now ACTIVE.`,
+                'Ride Created!',
+                `Your ride to ${result.destination} is now ACTIVE.`,
                 [{ text: 'OK', onPress: () => router.replace('/home') }],
             );
         } catch (err: any) {
@@ -144,247 +164,284 @@ export default function CreateRideScreen() {
         }
     };
 
-    // ── Render ────────────────────────────────────────────
     return (
-        <ScrollView style={s.root} contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
-
+        <View style={s.root}>
             {/* Header */}
             <View style={s.header}>
                 <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-                    <Text style={s.backText}>←</Text>
+                    <Ionicons name="arrow-back" size={24} color={C.text} />
                 </TouchableOpacity>
-                <Text style={s.headerTitle}>Create Ride</Text>
+                <Text style={s.headerTitle}>Offer a Ride</Text>
+                <View style={{ width: 40 }} />
             </View>
 
-            {/* ── Destination search ──────────────────────── */}
-            <View style={s.section}>
-                <Text style={s.label}>📍  Destination</Text>
-                <View style={s.searchBar}>
-                    <TextInput
-                        style={s.searchInput}
-                        placeholder="Search destination…"
-                        placeholderTextColor={C.placeholder}
-                        value={destQuery}
-                        onChangeText={handleDestChange}
-                        autoCorrect={false}
-                    />
-                    {searching && <ActivityIndicator size="small" color={C.accent} />}
-                    {destQuery.length > 0 && !searching && (
-                        <TouchableOpacity onPress={() => { setDestQuery(''); setDestination(null); setSuggestions([]); }}>
-                            <Text style={s.clearBtn}>✕</Text>
-                        </TouchableOpacity>
+            <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+
+                {/* ── LOCATION ── */}
+                <View style={s.card}>
+                    <View style={s.routeRow}>
+                        <View style={s.routeLine}>
+                            <View style={s.dotOrigin} />
+                            <View style={s.verticalLine} />
+                            <View style={s.dotDest} />
+                        </View>
+                        <View style={s.routeInputs}>
+                            <View style={s.inputWrap}>
+                                <Text style={s.inputLabel}>Origin</Text>
+                                <Text style={s.originDisplay}>Current Location</Text>
+                            </View>
+                            <View style={s.routeDivider} />
+                            <View style={s.inputWrap}>
+                                <Text style={s.inputLabel}>Destination</Text>
+                                <TextInput
+                                    style={s.destInput}
+                                    placeholder="Search destination..."
+                                    placeholderTextColor={C.textMuted}
+                                    value={destQuery}
+                                    onChangeText={handleDestChange}
+                                />
+                                {searching && <ActivityIndicator size="small" color={C.accent} style={s.searchSpinner} />}
+                            </View>
+                        </View>
+                    </View>
+
+                    {suggestions.length > 0 && (
+                        <View style={s.suggBox}>
+                            {suggestions.map((item, i) => (
+                                <TouchableOpacity
+                                    key={i}
+                                    style={[s.suggItem, i < suggestions.length - 1 && s.suggDivider]}
+                                    onPress={() => selectDest(item)}
+                                >
+                                    <View>
+                                        <Text style={s.suggName} numberOfLines={1}>{item.display_name.split(',')[0]}</Text>
+                                        <Text style={s.suggSub} numberOfLines={1}>{item.display_name.split(',').slice(1, 3).join(',')}</Text>
+                                    </View>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
                     )}
                 </View>
 
-                {suggestions.length > 0 && (
-                    <View style={s.suggBox}>
-                        {suggestions.map((item, i) => (
-                            <TouchableOpacity
-                                key={item.place_id ?? i}
-                                style={[s.suggItem, i < suggestions.length - 1 && s.suggDivider]}
-                                onPress={() => selectDest(item)}
-                                activeOpacity={0.7}
-                            >
-                                <Text style={s.suggIcon}>📍</Text>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={s.suggName} numberOfLines={1}>
-                                        {item.display_name.split(',')[0]}
-                                    </Text>
-                                    <Text style={s.suggSub} numberOfLines={1}>
-                                        {item.display_name.split(',').slice(1, 3).join(',')}
-                                    </Text>
-                                </View>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                )}
-
-                {destination && (
-                    <View style={s.confirmedCard}>
-                        <Text>✅</Text>
-                        <Text style={s.confirmedText}>{destination.name}</Text>
-                    </View>
-                )}
-            </View>
-
-
-            {/* ── Time picker ─────────────────────────────── */}
-            <View style={s.section}>
-                <Text style={s.label}>🕐  Departure Time</Text>
-                <TouchableOpacity style={s.pickerBtn} onPress={() => setShowTimeModal(true)}>
-                    <Text style={[s.pickerBtnText, !timeSet && s.muted]}>{timeLabel}</Text>
-                    <Text style={s.chevron}>›</Text>
-                </TouchableOpacity>
-            </View>
-
-            {/* ── Seat selector ───────────────────────────── */}
-            <View style={s.section}>
-                <Text style={s.label}>💺  Available Seats</Text>
-                <View style={s.seatsRow}>
-                    <TouchableOpacity
-                        style={[s.seatBtn, seats <= 1 && s.seatBtnOff]}
-                        onPress={() => setSeats(v => Math.max(1, v - 1))}
-                        disabled={seats <= 1}
-                    >
-                        <Text style={s.seatBtnText}>−</Text>
-                    </TouchableOpacity>
-                    <Text style={s.seatsCount}>{seats}</Text>
-                    <TouchableOpacity
-                        style={[s.seatBtn, seats >= 4 && s.seatBtnOff]}
-                        onPress={() => setSeats(v => Math.min(4, v + 1))}
-                        disabled={seats >= 4}
-                    >
-                        <Text style={s.seatBtnText}>+</Text>
-                    </TouchableOpacity>
-                    <Text style={s.seatsHint}>max 4</Text>
-                </View>
-            </View>
-
-            {/* ── Confirm ─────────────────────────────────── */}
-            <TouchableOpacity
-                style={[s.confirmBtn, (!isValid || loading) && s.confirmOff]}
-                onPress={handleConfirm}
-                disabled={!isValid || loading}
-                activeOpacity={0.8}
-            >
-                {loading
-                    ? <ActivityIndicator color={C.btnText} />
-                    : <Text style={[s.confirmText, !isValid && { color: 'rgba(5,31,32,0.4)' }]}>Confirm Ride</Text>
-                }
-            </TouchableOpacity>
-
-            {!isValid && (
-                <Text style={s.hint}>Choose destination and departure time to continue</Text>
-            )}
-
-
-            {/* ── Time Modal ──────────────────────────────── */}
-            <Modal visible={showTimeModal} transparent animationType="slide">
-                <View style={s.modalOverlay}>
-                    <View style={s.modalCard}>
-                        <Text style={s.modalTitle}>Select Time</Text>
-
-                        <View style={s.pickerRow}>
-                            {/* Hour */}
-                            <View style={[s.pickerCol, { flex: 1 }]}>
-                                <Text style={s.colLabel}>Hour</Text>
-                                <ScrollView style={s.colScroll} showsVerticalScrollIndicator={false}>
-                                    {HOURS.map(h => (
-                                        <TouchableOpacity key={h} style={[s.colItem, selHour === h && s.colItemSel]} onPress={() => setSelHour(h)}>
-                                            <Text style={[s.colItemText, selHour === h && s.colItemTextSel]}>
-                                                {String(h).padStart(2, '0')}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            </View>
-                            <Text style={s.timeSep}>:</Text>
-                            {/* Minute */}
-                            <View style={[s.pickerCol, { flex: 1 }]}>
-                                <Text style={s.colLabel}>Min</Text>
-                                <ScrollView style={s.colScroll} showsVerticalScrollIndicator={false}>
-                                    {MINS.map(m => (
-                                        <TouchableOpacity key={m} style={[s.colItem, selMin === m && s.colItemSel]} onPress={() => setSelMin(m)}>
-                                            <Text style={[s.colItemText, selMin === m && s.colItemTextSel]}>
-                                                {String(m).padStart(2, '0')}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            </View>
-                        </View>
-
-                        <TouchableOpacity style={s.modalConfirmBtn} onPress={() => { setTimeSet(true); setShowTimeModal(false); }}>
-                            <Text style={s.modalConfirmText}>Set Time</Text>
+                {/* ── DEPARTURE TIME ── */}
+                <View style={s.card}>
+                    <Text style={s.cardTitle}>Departure Time</Text>
+                    <View style={s.segmentGroup}>
+                        <TouchableOpacity
+                            style={[s.segmentBtn, timeType === 'Now' && s.segmentActive]}
+                            onPress={() => setTimeType('Now')}
+                        >
+                            <Text style={[s.segmentText, timeType === 'Now' && s.segmentTextActive]}>Now</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[s.segmentBtn, timeType === 'Schedule' && s.segmentActive]}
+                            onPress={() => setTimeType('Schedule')}
+                        >
+                            <Text style={[s.segmentText, timeType === 'Schedule' && s.segmentTextActive]}>Schedule</Text>
                         </TouchableOpacity>
                     </View>
-                </View>
-            </Modal>
 
-        </ScrollView>
+                    {timeType === 'Schedule' && (
+                        <TouchableOpacity style={s.timePickerBtn} onPress={() => setShowPicker(true)}>
+                            <Text style={s.timePickerLabel}>Select Time</Text>
+                            <Text style={s.timePickerVal}>
+                                {scheduleTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </Text>
+                        </TouchableOpacity>
+                    )}
+                    {(showPicker && Platform.OS !== 'ios') && (
+                        <DateTimePicker
+                            value={scheduleTime}
+                            mode="time"
+                            is24Hour={true}
+                            display="default"
+                            onChange={(event: any, selectedDate: any) => {
+                                setShowPicker(Platform.OS === 'ios');
+                                if (selectedDate) setScheduleTime(selectedDate);
+                            }}
+                        />
+                    )}
+                    {(showPicker && Platform.OS === 'ios') && (
+                        <View style={{ marginTop: 10 }}>
+                            <DateTimePicker
+                                value={scheduleTime}
+                                mode="time"
+                                is24Hour={true}
+                                display="spinner"
+                                onChange={(event: any, selectedDate: any) => selectedDate && setScheduleTime(selectedDate)}
+                            />
+                        </View>
+                    )}
+                </View>
+
+                {/* ── SEATS ── */}
+                <View style={s.card}>
+                    <View style={s.rowBetween}>
+                        <Text style={s.cardTitle}>Available Seats</Text>
+                        <View style={s.stepper}>
+                            <TouchableOpacity style={s.stepBtn} onPress={() => setSeats(Math.max(1, seats - 1))}>
+                                <Text style={s.stepSymbol}>-</Text>
+                            </TouchableOpacity>
+                            <Text style={s.stepVal}>{seats}</Text>
+                            <TouchableOpacity style={s.stepBtn} onPress={() => setSeats(Math.min(4, seats + 1))}>
+                                <Text style={s.stepSymbol}>+</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+
+                {/* ── GENDER PREFERENCE ── */}
+                <View style={s.card}>
+                    <Text style={s.cardTitle}>Gender Preference</Text>
+                    <Text style={s.cardSubtitle}>Who do you prefer to ride with?</Text>
+                    <View style={s.segmentGroup}>
+                        {(['Male', 'Female', 'Any'] as const).map(tab => {
+                            const active = genderPref === tab;
+                            return (
+                                <TouchableOpacity
+                                    key={tab}
+                                    style={[s.segmentBtn, active && s.segmentActive]}
+                                    onPress={() => setGenderPref(tab)}
+                                >
+                                    <Text style={[s.segmentText, active && s.segmentTextActive]}>
+                                        {tab === 'Any' ? '👥' : tab === 'Male' ? '♂' : '♀'} {tab}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+                </View>
+
+                {/* ── ROUTE PREVIEW ── */}
+                {destination && (
+                    <View style={s.card}>
+                        <Text style={s.cardTitle}>Route Preview</Text>
+                        <Text style={s.cardSubtitle}>from Current Location to {destination.name}</Text>
+                        <View style={s.mapContainer}>
+                            {originRegion ? (
+                                <MapView
+                                    style={s.map}
+                                    initialRegion={{
+                                        latitude: originRegion.latitude,
+                                        longitude: originRegion.longitude,
+                                        latitudeDelta: 0.1,
+                                        longitudeDelta: 0.1,
+                                    }}
+                                    showsUserLocation={true}
+                                >
+                                    {routePoints.length > 0 && (
+                                        <Polyline
+                                            coordinates={routePoints}
+                                            strokeColor="#A3e635" // btnBg
+                                            strokeWidth={4}
+                                        />
+                                    )}
+                                    <Marker
+                                        coordinate={{ latitude: destination.coordinates[1], longitude: destination.coordinates[0] }}
+                                        pinColor={C.accent}
+                                    />
+                                </MapView>
+                            ) : (
+                                <View style={s.mapPlaceholderInner}>
+                                    <ActivityIndicator color={C.accent} />
+                                    <Text style={s.mapText}>Loading Route...</Text>
+                                </View>
+                            )}
+                        </View>
+                    </View>
+                )}
+
+            </ScrollView>
+
+            {/* ── POST RIDE BUTTON ── */}
+            <View style={s.footer}>
+                <TouchableOpacity
+                    style={[s.submitBtn, (!isValid || loading) && s.submitDisabled]}
+                    onPress={handlePostRide}
+                    disabled={!isValid || loading}
+                >
+                    {loading ? (
+                        <ActivityIndicator color={C.btnText} />
+                    ) : (
+                        <Text style={s.submitText}>Post Ride</Text>
+                    )}
+                </TouchableOpacity>
+            </View>
+        </View>
     );
 }
 
-// ── Styles ────────────────────────────────────────────────
 const s = StyleSheet.create({
     root: { flex: 1, backgroundColor: C.bg },
-    scroll: { paddingBottom: 56 },
-
     header: {
-        flexDirection: 'row', alignItems: 'center',
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
         paddingTop: Platform.OS === 'android' ? 44 : 60,
-        paddingHorizontal: 20, paddingBottom: 20, gap: 16,
+        paddingHorizontal: 20, paddingBottom: 16, backgroundColor: C.bg,
     },
-    backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-    backText: { color: C.accent, fontSize: 26, fontWeight: '600' },
-    headerTitle: { color: C.text, fontSize: 22, fontWeight: '700' },
+    backBtn: { padding: 4 },
+    backIcon: { fontSize: 26, fontWeight: '600', color: C.text },
+    headerTitle: { fontSize: 20, fontWeight: '700', color: C.text },
 
-    section: { marginHorizontal: 20, marginBottom: 20 },
-    label: { color: C.accent, fontSize: 13, fontWeight: '700', marginBottom: 10, letterSpacing: 0.5 },
+    scroll: { padding: 20, paddingBottom: 100 },
 
-    searchBar: {
-        flexDirection: 'row', alignItems: 'center',
-        backgroundColor: C.inputBg, borderRadius: 12,
-        paddingHorizontal: 14, paddingVertical: 14, gap: 8,
+    card: {
+        backgroundColor: C.card, borderRadius: 16, padding: 18, marginBottom: 16,
         borderWidth: 1, borderColor: C.cardBorder,
     },
-    searchInput: { flex: 1, color: C.text, fontSize: 15 },
-    clearBtn: { color: C.accent, fontSize: 16, fontWeight: '600' },
+    cardTitle: { fontSize: 16, fontWeight: '700', color: C.text, marginBottom: 14 },
+    cardSubtitle: { fontSize: 13, color: C.textMuted, marginTop: -10, marginBottom: 14 },
 
-    suggBox: {
-        marginTop: 6, backgroundColor: C.card,
-        borderRadius: 12, borderWidth: 1, borderColor: C.cardBorder, overflow: 'hidden',
-    },
-    suggItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, gap: 10 },
+    routeRow: { flexDirection: 'row' },
+    routeLine: { width: 30, alignItems: 'center', paddingVertical: 10 },
+    dotOrigin: { width: 10, height: 10, borderRadius: 5, backgroundColor: C.accent, borderWidth: 2, borderColor: C.accentDark },
+    verticalLine: { flex: 1, width: 2, backgroundColor: C.divider, marginVertical: 4 },
+    dotDest: { width: 10, height: 10, borderRadius: 5, backgroundColor: C.text },
+
+    routeInputs: { flex: 1 },
+    inputWrap: { paddingVertical: 4 },
+    inputLabel: { fontSize: 12, fontWeight: '600', color: C.textMuted, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 },
+    originDisplay: { fontSize: 15, fontWeight: '500', color: C.text, paddingVertical: 8 },
+    destInput: { fontSize: 15, fontWeight: '500', color: C.text, paddingVertical: 8 },
+    routeDivider: { height: 1, backgroundColor: C.divider, marginVertical: 8 },
+    searchSpinner: { position: 'absolute', right: 10, top: 30 },
+
+    suggBox: { marginTop: 12, borderTopWidth: 1, borderTopColor: C.divider, paddingTop: 8 },
+    suggItem: { paddingVertical: 12 },
     suggDivider: { borderBottomWidth: 1, borderBottomColor: C.divider },
-    suggIcon: { fontSize: 14 },
-    suggName: { color: C.text, fontSize: 14, fontWeight: '500' },
-    suggSub: { color: C.textMuted, fontSize: 12, marginTop: 1 },
+    suggName: { fontSize: 14, fontWeight: '600', color: C.text },
+    suggSub: { fontSize: 12, color: C.textMuted, marginTop: 2 },
 
-    confirmedCard: {
-        marginTop: 8, flexDirection: 'row', alignItems: 'center',
-        backgroundColor: 'rgba(142,182,155,0.1)', borderRadius: 10, padding: 12, gap: 8,
-        borderWidth: 1, borderColor: 'rgba(142,182,155,0.25)',
-    },
-    confirmedText: { color: C.accent, fontSize: 14, fontWeight: '600', flex: 1 },
+    segmentGroup: { flexDirection: 'row', backgroundColor: C.inputBg, borderRadius: 10, padding: 4, borderWidth: 1, borderColor: C.cardBorder },
+    segmentBtn: { flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
+    segmentActive: { backgroundColor: C.accentDark },
+    segmentText: { fontSize: 14, fontWeight: '600', color: C.textMuted },
+    segmentTextActive: { color: C.text, fontWeight: '700' },
 
-    pickerBtn: {
-        flexDirection: 'row', alignItems: 'center',
-        backgroundColor: C.inputBg, borderRadius: 12,
-        paddingHorizontal: 16, paddingVertical: 16,
+    timePickerBtn: {
+        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+        marginTop: 16, backgroundColor: C.inputBg, padding: 16, borderRadius: 12,
         borderWidth: 1, borderColor: C.cardBorder,
     },
-    pickerBtnText: { flex: 1, color: C.text, fontSize: 15 },
-    muted: { color: C.placeholder },
-    chevron: { color: C.accent, fontSize: 20 },
+    timePickerLabel: { fontSize: 14, fontWeight: '500', color: C.text },
+    timePickerVal: { fontSize: 15, fontWeight: '700', color: C.accent },
 
-    seatsRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-    seatBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.accentDark, alignItems: 'center', justifyContent: 'center' },
-    seatBtnOff: { opacity: 0.35 },
-    seatBtnText: { color: '#fff', fontSize: 24, fontWeight: '600', lineHeight: 28 },
-    seatsCount: { color: C.text, fontSize: 32, fontWeight: '700', minWidth: 36, textAlign: 'center' },
-    seatsHint: { color: C.textMuted, fontSize: 12 },
+    rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    stepper: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.inputBg, borderRadius: 10, borderWidth: 1, borderColor: C.cardBorder },
+    stepBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+    stepSymbol: { fontSize: 20, fontWeight: '500', color: C.accent },
+    stepVal: { width: 24, textAlign: 'center', fontSize: 16, fontWeight: '700', color: C.text },
 
-    confirmBtn: { marginHorizontal: 20, marginTop: 12, backgroundColor: C.btnBg, borderRadius: 14, paddingVertical: 18, alignItems: 'center' },
-    confirmOff: { backgroundColor: C.btnDisabled },
-    confirmText: { color: C.btnText, fontSize: 17, fontWeight: '700' },
-    hint: { color: C.textMuted, fontSize: 13, textAlign: 'center', marginTop: 10 },
+    mapContainer: { height: 160, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: C.cardBorder, backgroundColor: C.inputBg },
+    map: { width: '100%', height: '100%' },
+    mapPlaceholderInner: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 },
+    mapText: { fontSize: 13, fontWeight: '600', color: C.textMuted },
 
-    // Modal
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-    modalCard: { backgroundColor: C.modalBg, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: Platform.OS === 'ios' ? 48 : 24 },
-    modalTitle: { color: C.text, fontSize: 18, fontWeight: '700', marginBottom: 20, textAlign: 'center' },
-
-    pickerRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },
-    pickerCol: { flex: 1, alignItems: 'center' },
-    colLabel: { color: C.textMuted, fontSize: 12, marginBottom: 6 },
-    colScroll: { height: 160 },
-    colItem: { paddingVertical: 10, paddingHorizontal: 8, borderRadius: 8, minWidth: 52, alignItems: 'center' },
-    colItemSel: { backgroundColor: C.accentDark },
-    colItemText: { color: C.textMuted, fontSize: 16 },
-    colItemTextSel: { color: C.accent, fontWeight: '700' },
-    timeSep: { color: C.accent, fontSize: 28, fontWeight: '700', alignSelf: 'center', marginTop: 24 },
-
-    modalConfirmBtn: { backgroundColor: C.btnBg, borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
-    modalConfirmText: { color: C.btnText, fontSize: 16, fontWeight: '700' },
+    footer: {
+        position: 'absolute', bottom: 0, left: 0, right: 0,
+        backgroundColor: C.card, padding: 20, paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+        borderTopWidth: 1, borderTopColor: C.divider,
+    },
+    submitBtn: { backgroundColor: C.btnBg, borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
+    submitDisabled: { opacity: 0.5 },
+    submitText: { color: C.text, fontSize: 16, fontWeight: '700' },
 });

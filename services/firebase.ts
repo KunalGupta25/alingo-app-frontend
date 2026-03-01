@@ -1,5 +1,8 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+// @ts-ignore
+import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Helper to safely access Expo environment variables
 const getEnvVar = (key: string, defaultValue: string = ''): string => {
@@ -22,8 +25,13 @@ export const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firebase Auth
-export const auth = getAuth(app);
+// Initialize Firebase Auth with React Native persistence
+export const auth = initializeAuth(app, {
+    persistence: getReactNativePersistence(AsyncStorage)
+});
+
+// Initialize Firestore
+export const db = getFirestore(app);
 
 // Note: For React Native with Expo, Firebase Phone Auth works best on web
 // For native devices, you'll need to configure reCAPTCHA or use a custom backend

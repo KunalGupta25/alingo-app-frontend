@@ -31,6 +31,25 @@ export const getOSRMPolyline = async (
     }
 };
 
+// ── Decode OSRM polyline string to Coordinates array ──────
+export const decodePolyline = (t: string, e: number = 5): { latitude: number, longitude: number }[] => {
+    let n = 0, o = 0, s = 0, l = 0, r = 0, h = t.length, i: { latitude: number, longitude: number }[] = [], d = Math.pow(10, e);
+
+    // Extracted out variables for TS compiler happiness
+    let latOffset = 0;
+    let lngOffset = 0;
+
+    for (; s < h;) {
+        for (r = 0, l = 0; n = t.charCodeAt(s++) - 63, l |= (31 & n) << r, r += 5, n >= 32;);
+        let a = 1 & l ? ~(l >> 1) : l >> 1; latOffset += a;
+        for (r = 0, l = 0; n = t.charCodeAt(s++) - 63, l |= (31 & n) << r, r += 5, n >= 32;);
+        let c = 1 & l ? ~(l >> 1) : l >> 1; lngOffset += c;
+
+        i.push({ latitude: latOffset / d, longitude: lngOffset / d });
+    }
+    return i;
+};
+
 // ── Ride API ──────────────────────────────────────────────
 export const rideService = {
     createRide: async (payload: {
@@ -39,6 +58,7 @@ export const rideService = {
         ride_time: string;
         max_seats: number;
         route_polyline: string;
+        gender_preference?: string;
     }) => {
         const headers = await getAuthHeader();
         const response = await api.post('/rides/create', payload, { headers });
@@ -49,6 +69,7 @@ export const rideService = {
         user_location: [number, number];
         ride_date: string;
         route_polyline: string;
+        gender_filter?: string;
     }) => {
         const headers = await getAuthHeader();
         const response = await api.post('/rides/search', payload, { headers });
@@ -97,11 +118,12 @@ export const rideService = {
                 ride_time: string;
                 destination_name: string;
                 max_seats: number;
-                participants: Array<{ user_id: string; name: string; status: string }>;
+                participants: Array<{ user_id: string; name: string; phone?: string; status: string }>;
                 completion_votes: number;
                 majority_needed: number;
                 is_creator: boolean;
                 creator_id: string;
+                route_polyline?: string;
             };
         };
     },
@@ -118,6 +140,26 @@ export const rideService = {
                 creator_id: string;
                 my_status: 'PENDING' | 'APPROVED' | 'REJECTED';
             }>;
+        };
+    },
+
+    getRideDetail: async (ride_id: string) => {
+        const headers = await getAuthHeader();
+        const response = await api.get('/rides/detail', { headers, params: { ride_id } });
+        return response.data as {
+            ride_id: string;
+            status: string;
+            destination_name: string;
+            destination_coords: number[];
+            ride_date: string;
+            ride_time: string;
+            max_seats: number;
+            route_polyline: string;
+            creator_id: string;
+            creator_name: string;
+            participants: Array<{ user_id: string; name: string; phone?: string; status: string }>;
+            gender_preference: string;
+            created_at: string;
         };
     },
 };

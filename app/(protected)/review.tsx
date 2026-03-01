@@ -14,17 +14,17 @@ import { reviewService } from '../../services/reviewService';
 
 // ── Palette ───────────────────────────────────────────────
 const C = {
-    bg: '#051F20',
-    card: '#0B2B26',
-    cardBorder: 'rgba(142,182,155,0.15)',
-    accent: '#8EB69B',
-    accentDark: '#235347',
+    bg: '#0b1416',
+    card: '#0F3D3E',
+    cardBorder: 'rgba(79, 209, 197, 0.15)',
+    accent: '#4fd1c5',
+    accentDark: 'rgba(79, 209, 197, 0.2)',
     text: '#FFFFFF',
     textMuted: 'rgba(255,255,255,0.5)',
-    divider: 'rgba(142,182,155,0.12)',
-    btnBg: '#8EB69B',
-    btnText: '#051F20',
-    btnDisabled: 'rgba(142,182,155,0.3)',
+    divider: 'rgba(79, 209, 197, 0.12)',
+    btnBg: '#A3e635',
+    btnText: '#0b1416',
+    btnDisabled: 'rgba(163, 230, 53, 0.3)',
     star: '#F4C430',
     starEmpty: 'rgba(255,255,255,0.2)',
 };

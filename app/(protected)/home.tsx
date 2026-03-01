@@ -16,38 +16,42 @@ import {
     UIManager,
     ScrollView,
     Keyboard,
+    Linking,
 } from 'react-native';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
 }
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import { userService } from '../../services/userService';
-import { rideService } from '../../services/rideService';
+import { rideService, decodePolyline } from '../../services/rideService';
 
 const C = {
-    sheetBg: 'rgba(17,33,20,0.95)',       // #112114 with opacity for backdrop blur
-    searchBg: 'rgba(14,129,33,0.1)',     // #0e8121 / 10%
-    searchBorder: 'rgba(14,129,33,0.2)', // #0e8121 / 20%
-    searchText: '#F1F5F9',               // slate-100
-    searchPlaceholder: '#94A3B8',        // slate-400
-    pill: 'rgba(17,33,20,0.8)',          // #112114 / 80%
-    pillText: '#E2E8F0',                 // slate-200
-    pillDot: '#0e8121',                  // primary #0e8121
-    destText: '#F1F5F9',                 // slate-100
-    destSub: '#64748B',                  // slate-500
-    divider: 'rgba(14,129,33,0.1)',      // primary / 10%
-    navBg: '#112114',                    // background-dark
-    navActiveIcon: '#0e8121',            // primary #0e8121
-    navInactiveIcon: '#64748B',          // slate-500
-    navDivider: 'rgba(14,129,33,0.2)',   // primary / 20%
-    suggestionBg: 'rgba(14,129,33,0.1)', // #0e8121 / 10% for hover state
-    primary: '#0e8121',
-    headerBg: 'rgba(17,33,20,0.6)',      // For the notification icon
+    sheetBg: '#0F3D3E',
+    searchBg: '#134A4C',
+    searchBorder: '#236567',
+    searchText: '#E6F4F1',
+    searchPlaceholder: '#7FA3A0',
+    pill: '#134A4C',
+    pillBorder: '#4FD1C5',
+    pillText: '#E6F4F1',
+    pillDot: '#A3E635',
+    cardBorder: '#236567',
+    destText: '#E6F4F1',
+    destSub: '#8FAFA8',
+    divider: '#236567',
+    navBg: '#0F3D3E',
+    navActiveIcon: '#A3E635',
+    navInactiveIcon: '#5F6F73',
+    suggestionBg: '#114244',
+    primary: '#4FD1C5',
+    headerBg: '#0F3D3E',
 };
 
 const { height: SCREEN_H } = Dimensions.get('window');
@@ -58,11 +62,11 @@ const ACTIVE_SHEET_MAX = SCREEN_H * 0.66;
 
 // ── Static recents (shown when search is empty) ───────────
 const RECENTS = [
-    { id: '1', name: 'Parul University', sub: 'Waghodia, Vadodara', icon: '🎓' },
-    { id: '2', name: 'Railway Station', sub: 'Main Junction, Center', icon: '🚆' },
-    { id: '3', name: 'D-Mart', sub: 'Hypermarket Outlet', icon: '🛒' },
-    { id: '4', name: 'Inorbit Mall', sub: 'Shopping & Entertainment', icon: '🛍️' },
-    { id: '5', name: 'Air Port', sub: 'International Terminal', icon: '✈️' },
+    { id: '1', name: 'Parul University', sub: 'Waghodia, Vadodara', icon: 'school' },
+    { id: '2', name: 'Railway Station', sub: 'Main Junction, Center', icon: 'train' },
+    { id: '3', name: 'D-Mart', sub: 'Hypermarket Outlet', icon: 'cart' },
+    { id: '4', name: 'Inorbit Mall', sub: 'Shopping & Entertainment', icon: 'bag-handle' },
+    { id: '5', name: 'Air Port', sub: 'International Terminal', icon: 'airplane' },
 ];
 
 // ── 30km degree offset (~0.27° lat, ~0.32° lon at 23° N) ───
@@ -97,12 +101,14 @@ export default function HomeScreen() {
         ride_id: string;
         destination_name: string;
         ride_time: string;
-        participants: Array<{ user_id: string; name: string; status: string }>;
+        participants: Array<{ user_id: string; name: string; phone?: string; status: string }>;
         completion_votes: number;
         majority_needed: number;
         is_creator: boolean;
         creator_id: string;
+        route_polyline?: string;
     } | null>(null);
+    const [activeRideRoute, setActiveRideRoute] = useState<{ latitude: number, longitude: number }[]>([]);
     const [completing, setCompleting] = useState(false);
     const [respondingTo, setRespondingTo] = useState<string | null>(null); // user_id being approved/rejected
 
@@ -147,6 +153,8 @@ export default function HomeScreen() {
         return () => { k1.remove(); k2.remove(); };
     }, []);
 
+    const [searchFocused, setSearchFocused] = useState(false);
+
     // ── Init ───────────────────────────────────────────────
     useEffect(() => { requestLocation(); fetchMyActiveRide(); fetchMyRequests(); loadAvailability(); }, []);
 
@@ -161,6 +169,11 @@ export default function HomeScreen() {
         try {
             const data = await rideService.getMyActiveRide();
             setActiveRide(data.ride as any);
+            if (data.ride?.route_polyline) {
+                setActiveRideRoute(decodePolyline(data.ride.route_polyline));
+            } else {
+                setActiveRideRoute([]);
+            }
         } catch { /* ignore — user may not have a ride */ }
     };
 
@@ -297,6 +310,19 @@ export default function HomeScreen() {
         }
     };
 
+    const centerOnUser = () => {
+        if (userCoords && mapRef.current) {
+            mapRef.current.animateToRegion({
+                latitude: userCoords.latitude,
+                longitude: userCoords.longitude,
+                latitudeDelta: 0.015,
+                longitudeDelta: 0.015,
+            }, 800);
+        } else {
+            requestLocation();
+        }
+    };
+
     // ── Nominatim place search (30 km bounding box) ────────
     const searchPlaces = useCallback(async (text: string) => {
         if (!text.trim()) {
@@ -343,31 +369,34 @@ export default function HomeScreen() {
         debounceRef.current = setTimeout(() => searchPlaces(text), 300);
     };
 
-    // Tap a suggestion → place marker, pan map, collapse sheet
+    // Tap a suggestion → Redirect to Find Buddy with params
     const handleSelectSuggestion = (item: any) => {
         const lat = parseFloat(item.lat);
         const lon = parseFloat(item.lon);
         const name = item.display_name.split(',')[0];
 
-        setDestMarker({ latitude: lat, longitude: lon, name });
-        setQuery(name);
+        // Collapse keyboard and reset search
+        Keyboard.dismiss();
+        setQuery('');
         setSuggestions([]);
 
-        mapRef.current?.animateToRegion({
-            latitude: lat,
-            longitude: lon,
-            latitudeDelta: 0.015,
-            longitudeDelta: 0.015,
-        }, 600);
-
-        // Collapse sheet to show the map
-        Keyboard.dismiss();
+        // Route to Find Buddy passing location data
+        router.push({
+            pathname: '/find-buddy',
+            params: {
+                destLat: lat,
+                destLon: lon,
+                destName: name,
+            }
+        });
     };
 
     // ── Render ─────────────────────────────────────────────
     const defaultRegion = {
-        latitude: 23.0258, longitude: 72.5873,   // Vadodara (near Parul Uni)
-        latitudeDelta: 0.08, longitudeDelta: 0.08,
+        latitude: activeRideRoute.length > 0 ? activeRideRoute[0].latitude : 23.0258,
+        longitude: activeRideRoute.length > 0 ? activeRideRoute[0].longitude : 72.5873,
+        latitudeDelta: activeRideRoute.length > 0 ? 0.05 : 0.08,
+        longitudeDelta: activeRideRoute.length > 0 ? 0.05 : 0.08,
     };
 
     return (
@@ -384,6 +413,7 @@ export default function HomeScreen() {
                 showsCompass={false}
                 customMapStyle={darkGreenStyle}
             >
+                {/* Regular destination marker drop */}
                 {destMarker && (
                     <Marker
                         coordinate={{ latitude: destMarker.latitude, longitude: destMarker.longitude }}
@@ -391,32 +421,50 @@ export default function HomeScreen() {
                         pinColor="#8EB69B"
                     />
                 )}
+
+                {/* Active Ride Route Overlay */}
+                {activeRideRoute.length > 0 && (
+                    <>
+                        <Marker coordinate={activeRideRoute[activeRideRoute.length - 1]} pinColor={C.primary} title="Destination" />
+                        <Polyline
+                            coordinates={activeRideRoute}
+                            strokeColor={C.pillDot}
+                            strokeWidth={4}
+                            geodesic={true}
+                        />
+                    </>
+                )}
             </MapView>
+
+            {/* ── Map Controls ───────────────────────────── */}
+            <View style={s.mapControlsWrap} pointerEvents="box-none">
+                <TouchableOpacity style={s.mapControlBtn} onPress={centerOnUser} activeOpacity={0.8}>
+                    <Ionicons name="locate" size={24} color={C.primary} />
+                </TouchableOpacity>
+            </View>
 
             {/* ── Header Area ──────────────────────────── */}
             <View style={s.headerWrap} pointerEvents="box-none">
                 <View style={s.headerTopRow}>
                     <View style={s.headerGreetingWrap}>
-                        <View style={s.headerCarIcon}>
-                            <Text style={{ fontSize: 18 }}>🚘</Text>
-                        </View>
                         <Text style={s.greetingText}>
-                            Hello {user?.full_name?.split(' ')[0] || 'Rider'}! 🚗
+                            Hello {user?.full_name?.split(' ')[0] || 'Rider'}!
                         </Text>
                     </View>
                     <TouchableOpacity style={s.notificationBtn}>
-                        <Text style={{ fontSize: 20 }}>🔔</Text>
+                        <Ionicons name="notifications" size={24} color="#E6F4F1" />
                     </TouchableOpacity>
                 </View>
 
                 {/* Pickup Pill */}
                 <View style={{ alignItems: 'center' }}>
                     <TouchableOpacity style={s.pill}>
-                        <Text style={s.pillLocationIcon}>⦿</Text>
+                        <Ionicons name="radio-button-on" size={16} color={C.pillDot} style={{ marginRight: -2 }} />
                         <Text style={s.pillText} numberOfLines={1}>
-                            Pickup: {locationLabel !== 'Locating…' ? locationLabel : 'Searching...'}
+                            <Text style={{ fontWeight: '400' }}>Pickup: </Text>
+                            <Text style={{ fontWeight: '800' }}>{locationLabel !== 'Locating…' ? locationLabel : 'Searching...'}</Text>
                         </Text>
-                        <Text style={s.pillChevronIcon}>⌄</Text>
+                        <Ionicons name="chevron-down" size={18} color={C.pillDot} style={{ marginTop: -2 }} />
                     </TouchableOpacity>
                 </View>
             </View>
@@ -425,7 +473,7 @@ export default function HomeScreen() {
 
             {activeRide ? (
                 // ── Active Ride Sheet (Dynamic Height) ───
-                <View style={[s.sheet, { maxHeight: ACTIVE_SHEET_MAX, paddingBottom: 16 }]}>
+                <LinearGradient colors={['#133839', '#091A1B']} style={[s.sheet, { maxHeight: ACTIVE_SHEET_MAX, paddingBottom: 16 }]}>
                     <TouchableOpacity onPress={toggleActiveRide} style={s.handleWrap} activeOpacity={0.8}>
                         <View style={s.handle} />
                     </TouchableOpacity>
@@ -443,17 +491,27 @@ export default function HomeScreen() {
                                 </TouchableOpacity>
                             </View>
 
+                            {/* Group Chat Action */}
+                            <TouchableOpacity
+                                style={s.groupChatBtn}
+                                activeOpacity={0.8}
+                                onPress={() => router.push({ pathname: '/ride-chat', params: { ride_id: activeRide.ride_id, dest: activeRide.destination_name } })}
+                            >
+                                <Ionicons name="chatbubbles" size={20} color="#0B1416" />
+                                <Text style={s.groupChatText}>Open Group Chat</Text>
+                            </TouchableOpacity>
+
                             {/* Info Card */}
                             <View style={s.infoCard}>
                                 <View style={s.infoRow}>
-                                    <Text style={s.infoIcon}>🕒</Text>
+                                    <Ionicons name="time-outline" size={20} color={C.primary} style={{ marginTop: 2 }} />
                                     <View>
                                         <Text style={s.infoLabel}>TIME</Text>
                                         <Text style={s.infoValue}>{activeRide.ride_time}</Text>
                                     </View>
                                 </View>
                                 <View style={s.infoRow}>
-                                    <Text style={s.infoIcon}>📍</Text>
+                                    <Ionicons name="location-outline" size={20} color={C.primary} style={{ marginTop: 2 }} />
                                     <View>
                                         <Text style={s.infoLabel}>DESTINATION</Text>
                                         <Text style={s.infoValue}>{activeRide.destination_name}</Text>
@@ -461,17 +519,60 @@ export default function HomeScreen() {
                                 </View>
                             </View>
 
+                            {/* Map Preview */}
+                            {activeRideRoute.length > 0 && (
+                                <View style={{ height: 160, borderRadius: 12, overflow: 'hidden', marginTop: 16, borderWidth: 1, borderColor: C.cardBorder }}>
+                                    <MapView
+                                        style={{ flex: 1 }}
+                                        initialRegion={{
+                                            latitude: activeRideRoute[0].latitude,
+                                            longitude: activeRideRoute[0].longitude,
+                                            latitudeDelta: 0.05,
+                                            longitudeDelta: 0.05,
+                                        }}
+                                        pitchEnabled={false}
+                                        rotateEnabled={false}
+                                        scrollEnabled={false}
+                                        zoomEnabled={false}
+                                    >
+                                        <Marker coordinate={activeRideRoute[0]} pinColor={C.pillDot} />
+                                        <Marker coordinate={activeRideRoute[activeRideRoute.length - 1]} pinColor={C.primary} />
+                                        <Polyline
+                                            coordinates={activeRideRoute}
+                                            strokeColor={C.pillDot}
+                                            strokeWidth={4}
+                                        />
+                                    </MapView>
+                                </View>
+                            )}
+
                             {/* Participants */}
                             <Text style={s.sectionTitle}>PARTICIPANTS</Text>
                             {activeRide.participants && activeRide.participants.length > 0 ? (
                                 activeRide.participants.map(p => (
                                     <View key={p.user_id} style={s.participantCard}>
-                                        <View style={s.participantAvatar}><Text style={s.participantAvatarText}>👤</Text></View>
+                                        <View style={s.participantAvatar}><Ionicons name="person" size={20} color="#E6F4F1" /></View>
                                         <View style={{ flex: 1 }}>
-                                            <Text style={s.participantName}>{p.user_id === activeRide.creator_id ? 'You (Creator)' : p.name}</Text>
-                                            <Text style={s.participantRole}>{p.status === 'APPROVED' ? 'Passenger' : p.status}</Text>
+                                            <Text style={s.participantName}>
+                                                {p.user_id === user?.user_id
+                                                    ? 'You'
+                                                    : (p.name?.replace(/^\/+/, '') || 'Unknown User')}
+                                            </Text>
+                                            <Text style={s.participantRole}>
+                                                {p.user_id === activeRide.creator_id
+                                                    ? 'Creator'
+                                                    : (p.status === 'APPROVED' ? 'Passenger' : p.status)}
+                                            </Text>
                                         </View>
-                                        <Text style={s.chatIcon}>💬</Text>
+                                        <View style={{ flexDirection: 'row', gap: 12 }}>
+                                            {p.user_id !== user?.user_id && p.phone && (
+                                                <TouchableOpacity onPress={() => Linking.openURL(`tel:${p.phone}`)}>
+                                                    <View style={s.callBtnWrap}>
+                                                        <Ionicons name="call" size={18} color="#0B1416" />
+                                                    </View>
+                                                </TouchableOpacity>
+                                            )}
+                                        </View>
                                     </View>
                                 ))
                             ) : (
@@ -485,21 +586,21 @@ export default function HomeScreen() {
                                     {activeRide.participants.filter(p => p.status === 'PENDING').length > 0 ? (
                                         activeRide.participants.filter(p => p.status === 'PENDING').map(p => (
                                             <View key={p.user_id} style={s.participantCard}>
-                                                <View style={s.participantAvatar}><Text style={s.participantAvatarText}>👤</Text></View>
+                                                <View style={s.participantAvatar}><Ionicons name="person" size={20} color="#E6F4F1" /></View>
                                                 <Text style={[s.participantName, { flex: 1 }]}>{p.name}</Text>
                                                 <View style={{ flexDirection: 'row', gap: 8 }}>
                                                     <TouchableOpacity style={s.approveBtnMini} onPress={() => handleRespond(p.user_id, 'APPROVE')} disabled={respondingTo === p.user_id}>
-                                                        <Text style={s.approveBtnTextTiny}>✓</Text>
+                                                        <Ionicons name="checkmark" size={16} color="#ffffff" />
                                                     </TouchableOpacity>
                                                     <TouchableOpacity style={s.rejectBtnMini} onPress={() => handleRespond(p.user_id, 'REJECT')} disabled={respondingTo === p.user_id}>
-                                                        <Text style={s.rejectBtnTextTiny}>✕</Text>
+                                                        <Ionicons name="close" size={16} color="#ffffff" />
                                                     </TouchableOpacity>
                                                 </View>
                                             </View>
                                         ))
                                     ) : (
                                         <View style={s.emptyPendingCard}>
-                                            <Text style={s.emptyPendingIcon}>👥+</Text>
+                                            <Ionicons name="people-circle" size={32} color={C.searchPlaceholder} style={{ marginBottom: 4 }} />
                                             <Text style={s.emptyPendingText}>No pending requests at the moment</Text>
                                         </View>
                                     )}
@@ -511,7 +612,7 @@ export default function HomeScreen() {
                                 <TouchableOpacity style={s.bigCancelBtn} onPress={handleCancelRide} disabled={canceling}>
                                     {canceling ? <ActivityIndicator size="small" color="#E07070" /> : (
                                         <>
-                                            <Text style={s.bigCancelIcon}>✕</Text>
+                                            <Ionicons name="close-circle" size={20} color="#E07070" style={{ marginRight: 8 }} />
                                             <Text style={s.bigCancelText}>Cancel Ride</Text>
                                         </>
                                     )}
@@ -528,13 +629,19 @@ export default function HomeScreen() {
                             <View style={s.minRowMain}>
                                 <View style={{ flex: 1 }}>
                                     <View style={s.minDestWrap}>
-                                        <Text style={s.minDestIcon}>📍</Text>
+                                        <Ionicons name="location" size={16} color={C.primary} style={{ marginRight: 6 }} />
                                         <Text style={s.minDestText} numberOfLines={2}>{activeRide.destination_name}</Text>
                                     </View>
                                     <View style={s.minStatsWrap}>
-                                        <Text style={s.minStatText}>🕒 {activeRide.ride_time}</Text>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                            <Ionicons name="time" size={14} color="#E6F4F1" />
+                                            <Text style={s.minStatText}>{activeRide.ride_time}</Text>
+                                        </View>
                                         <Text style={s.minStatDot}> • </Text>
-                                        <Text style={s.minStatText}>👥 {activeRide.completion_votes}/{activeRide.majority_needed} votes</Text>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                            <Ionicons name="people" size={14} color="#E6F4F1" />
+                                            <Text style={s.minStatText}>{activeRide.completion_votes}/{activeRide.majority_needed} votes</Text>
+                                        </View>
                                     </View>
                                 </View>
                                 <TouchableOpacity style={s.minCompleteBtn} onPress={handleCompleteRide} disabled={completing}>
@@ -543,26 +650,37 @@ export default function HomeScreen() {
                             </View>
                         </TouchableOpacity>
                     )}
-                </View>
+                </LinearGradient>
             ) : (
                 // ── Location Search Sheet (Dynamic bounds) ───
-                <View
+                <LinearGradient
+                    colors={['#133839', '#091A1B']}
                     style={[
                         s.sheet,
                         keyboardH > 0
                             ? { top: Platform.OS === 'ios' ? 100 : 80, bottom: keyboardH, maxHeight: undefined }
-                            : { bottom: NAV_H, maxHeight: SCREEN_H * 0.45, paddingBottom: 24, paddingTop: 16 }
+                            : searchFocused
+                                ? { bottom: NAV_H, maxHeight: SCREEN_H * 0.66, paddingBottom: 24, paddingTop: 16 }
+                                : { bottom: NAV_H, maxHeight: SCREEN_H * 0.45, paddingBottom: 24, paddingTop: 16 }
                     ]}
                 >
                     {/* Search bar */}
                     <View style={s.searchBar}>
-                        <Text style={s.searchIcon}>🔍</Text>
+                        <Ionicons name="search" size={20} color={C.primary} />
                         <TextInput
                             style={s.searchInput}
                             placeholder="Where are you going?"
                             placeholderTextColor={C.searchPlaceholder}
                             value={query}
                             onChangeText={handleQueryChange}
+                            onFocus={() => {
+                                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                                setSearchFocused(true);
+                            }}
+                            onBlur={() => {
+                                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                                setSearchFocused(false);
+                            }}
                             returnKeyType="search"
                             clearButtonMode="while-editing"
                             autoCorrect={false}
@@ -572,7 +690,7 @@ export default function HomeScreen() {
                         )}
                         {query.length > 0 && !searching && (
                             <TouchableOpacity onPress={() => { setQuery(''); setSuggestions([]); }}>
-                                <Text style={s.clearBtn}>✕</Text>
+                                <Ionicons name="close-circle" size={20} color="rgba(255,255,255,0.6)" />
                             </TouchableOpacity>
                         )}
                     </View>
@@ -595,7 +713,7 @@ export default function HomeScreen() {
                                     onPress={() => handleSelectSuggestion(item)}
                                     activeOpacity={0.6}
                                 >
-                                    <View style={s.iconWrap}><Text style={s.pinIcon}>📍</Text></View>
+                                    <View style={s.iconWrap}><Ionicons name="location" size={20} color={C.primary} /></View>
                                     <View style={s.destInfo}>
                                         <Text style={s.destName} numberOfLines={1}>
                                             {item.display_name.split(',')[0]}
@@ -604,7 +722,7 @@ export default function HomeScreen() {
                                             {item.display_name.split(',').slice(1, 3).join(',')}
                                         </Text>
                                     </View>
-                                    <Text style={s.chevronIcon}>›</Text>
+                                    <Ionicons name="chevron-forward" size={20} color={C.primary} style={{ opacity: 0.5 }} />
                                 </TouchableOpacity>
                             )}
                         />
@@ -618,17 +736,17 @@ export default function HomeScreen() {
                             {RECENTS.map((d, i) => (
                                 <TouchableOpacity
                                     key={d.id}
-                                    style={[s.destRow, i < RECENTS.length - 1 && s.destDivider]}
+                                    style={[s.destRow, i < RECENTS.length - 1 && s.destDivider, { backgroundColor: 'transparent' }]}
                                     activeOpacity={0.6}
                                 >
                                     <View style={s.iconWrap}>
-                                        <Text style={s.clockIcon}>{d.icon}</Text>
+                                        <Ionicons name={d.icon as any} size={20} color={C.primary} />
                                     </View>
                                     <View style={s.destInfo}>
                                         <Text style={s.destName}>{d.name}</Text>
                                         <Text style={s.destSub}>{d.sub}</Text>
                                     </View>
-                                    <Text style={s.chevronIcon}>›</Text>
+                                    <Ionicons name="chevron-forward" size={20} color={C.primary} style={{ opacity: 0.5 }} />
                                 </TouchableOpacity>
                             ))}
                         </View>
@@ -636,7 +754,10 @@ export default function HomeScreen() {
 
                     {/* ── Availability Toggle ── */}
                     <View style={s.availRow}>
-                        <Text style={s.availLabel}>🟢 Available for rides</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Ionicons name="radio-button-on" size={16} color="#8EB69B" style={{ marginRight: 6 }} />
+                            <Text style={s.availLabel}>Available for rides</Text>
+                        </View>
                         <Switch
                             value={available}
                             onValueChange={handleAvailToggle}
@@ -649,58 +770,59 @@ export default function HomeScreen() {
                     {/* ── Pending Requests Banner (participant) ───── */}
                     {pendingRequests.length > 0 && (
                         <View style={s.pendingRequestsBanner}>
-                            <Text style={s.pendingRequestsTitle}>⏳ My Pending Requests ({pendingRequests.length})</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                                <Ionicons name="hourglass-outline" size={16} color="#E6BB73" style={{ marginRight: 6 }} />
+                                <Text style={s.pendingRequestsTitle}>My Pending Requests ({pendingRequests.length})</Text>
+                            </View>
                             {pendingRequests.map(req => (
                                 <View key={req.ride_id} style={s.pendingReqRow}>
-                                    <Text style={s.pendingReqDest} numberOfLines={1}>→ {req.destination_name}</Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
+                                        <Ionicons name="arrow-forward" size={14} color={C.destText} style={{ marginRight: 4 }} />
+                                        <Text style={s.pendingReqDest} numberOfLines={1}>{req.destination_name}</Text>
+                                    </View>
                                     <Text style={s.pendingReqStatus}>{req.my_status}</Text>
                                 </View>
                             ))}
                         </View>
                     )}
-                </View>
-            )}
+                </LinearGradient>
+            )
+            }
 
             {/* ── Bottom nav bar (always visible, outside the sheet) ─── */}
-            <View style={s.navBar}>
+            <LinearGradient colors={['#0A1E1F', '#071213']} style={s.navBar}>
                 <TouchableOpacity style={s.navItem} onPress={() => setActiveTab('home')}>
-                    <View style={[s.navIconWrap, activeTab === 'home' && s.navIconWrapActive]}>
-                        <Text style={[s.navIcon, activeTab === 'home' && s.navIconActive]}>⌂</Text>
+                    <View style={s.navIconWrap}>
+                        <Ionicons name="home" size={24} color={activeTab === 'home' ? C.navActiveIcon : C.navInactiveIcon} />
                     </View>
                 </TouchableOpacity>
-                <TouchableOpacity style={s.navItem} onPress={() => router.push('/create-ride')}>
-                    <Text style={s.navIconRaw}>🚗</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={s.navItem} onPress={() => router.push('/find-buddy')}>
-                    <Text style={s.navIconRaw}>💬</Text>
-                </TouchableOpacity>
                 <TouchableOpacity style={s.navItem} onPress={() => router.push('/profile')}>
-                    <Text style={s.navIconRaw}>👤</Text>
+                    <Ionicons name="person" size={24} color={activeTab === 'profile' ? C.navActiveIcon : C.navInactiveIcon} />
                 </TouchableOpacity>
-            </View>
-        </View>
+            </LinearGradient>
+        </View >
     );
 }
 
 // ── Dark green map theme ──────────────────────────────────
 const darkGreenStyle = [
-    { elementType: 'geometry', stylers: [{ color: '#0B2B26' }] },
-    { elementType: 'labels.text.fill', stylers: [{ color: '#8EB69B' }] },
-    { elementType: 'labels.text.stroke', stylers: [{ color: '#051F20' }] },
-    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#163832' }] },
-    { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#051F20' }] },
-    { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#235347' }] },
-    { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#051F20' }] },
-    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#051F20' }] },
-    { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#163832' }] },
-    { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#163832' }] },
-    { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#0B2B26' }] },
-    { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#235347' }] },
+    { elementType: 'geometry', stylers: [{ color: '#0B1416' }] },
+    { elementType: 'labels.text.fill', stylers: [{ color: '#4FD1C5' }] },
+    { elementType: 'labels.text.stroke', stylers: [{ color: '#0B1416' }] },
+    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#1F6F6B' }, { lightness: -40 }] },
+    { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#0B1416' }] },
+    { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#1F6F6B' }, { lightness: -20 }] },
+    { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#0B1416' }] },
+    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0B1416' }] },
+    { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#0B1416' }] },
+    { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#0B1416' }] },
+    { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#0B1416' }] },
+    { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#0B1416' }] },
 ];
 
 // ── Styles ────────────────────────────────────────────────
 const s = StyleSheet.create({
-    root: { flex: 1, backgroundColor: '#0B2B26' },
+    root: { flex: 1, backgroundColor: '#0B1416' },
 
     headerWrap: {
         position: 'absolute',
@@ -708,40 +830,46 @@ const s = StyleSheet.create({
         left: 20, right: 20,
         gap: 16,
     },
+    mapControlsWrap: {
+        position: 'absolute',
+        top: Platform.OS === 'android' ? 140 : 156,
+        right: 20,
+        alignItems: 'flex-end',
+        gap: 12,
+    },
+    mapControlBtn: {
+        width: 48, height: 48,
+        borderRadius: 24,
+        backgroundColor: '#0B2728',
+        borderWidth: 1, borderColor: 'rgba(79, 209, 197, 0.2)',
+        alignItems: 'center', justifyContent: 'center',
+        shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5,
+    },
     headerTopRow: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderRadius: 20,
+        backgroundColor: 'transparent',
     },
     headerGreetingWrap: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 10,
     },
-    headerCarIcon: {
-        backgroundColor: C.primary,
-        width: 40, height: 40,
-        borderRadius: 20,
-        alignItems: 'center',
-        justifyContent: 'center',
-        shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5,
-    },
     greetingText: {
         fontSize: 22,
         fontWeight: '700',
-        color: '#FFFFFF',
-        textShadowColor: 'rgba(5, 31, 32, 0.5)',
-        textShadowOffset: { width: 0, height: 2 },
-        textShadowRadius: 4,
+        color: '#E6F4F1',
     },
     notificationBtn: {
-        backgroundColor: C.headerBg,
+        backgroundColor: 'transparent', // let the gradient through
         width: 44, height: 44,
         borderRadius: 22,
         alignItems: 'center',
         justifyContent: 'center',
-        borderWidth: 1, borderColor: 'rgba(14,129,33,0.3)',
-        shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 5,
     },
     pill: {
         flexDirection: 'row',
@@ -750,17 +878,16 @@ const s = StyleSheet.create({
         borderRadius: 24,
         paddingHorizontal: 16,
         paddingVertical: 10,
-        borderWidth: 1, borderColor: 'rgba(14,129,33,0.3)',
+        borderWidth: 1, borderColor: C.pillBorder,
         gap: 8,
-        shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 8,
     },
-    pillLocationIcon: { color: C.primary, fontSize: 16 },
+    pillLocationIcon: { color: C.pillDot, fontSize: 16 },
     pillText: { color: C.pillText, fontSize: 14, fontWeight: '500' },
-    pillChevronIcon: { color: '#94A3B8', fontSize: 18, marginTop: -6 },
+    pillChevronIcon: { color: C.pillDot, fontSize: 18, marginTop: -6 },
 
     sheet: {
         position: 'absolute', bottom: NAV_H, left: 0, right: 0,
-        backgroundColor: C.sheetBg,
+        // gradient applied
         borderTopLeftRadius: 20,
         borderTopRightRadius: 20,
         overflow: 'hidden',
@@ -801,28 +928,27 @@ const s = StyleSheet.create({
     destRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 8,
+        paddingHorizontal: 16,
         paddingVertical: 12,
-        borderRadius: 12,
         gap: 14,
+        marginBottom: 8,
     },
-    destDivider: { /* removed bottom border, relying on spacing for sleek look */ },
+    destDivider: { borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
     iconWrap: {
-        backgroundColor: 'rgba(14,129,33,0.15)',
+        backgroundColor: 'transparent',
         width: 36, height: 36,
-        borderRadius: 8,
         alignItems: 'center',
         justifyContent: 'center',
     },
-    clockIcon: { fontSize: 18 },
-    pinIcon: { fontSize: 18 },
+    clockIcon: { fontSize: 18, color: C.primary },
+    pinIcon: { fontSize: 18, color: C.primary },
     destInfo: { flex: 1, justifyContent: 'center' },
     destName: { fontSize: 15, color: C.destText, fontWeight: '600', marginBottom: 2 },
     destSub: { fontSize: 13, color: C.destSub },
-    chevronIcon: { color: '#475569', fontSize: 24, fontWeight: '300' },
+    chevronIcon: { color: C.primary, fontSize: 24, fontWeight: '300', opacity: 0.5 },
 
     emptyWrap: { alignItems: 'center', paddingVertical: 20 },
-    emptyText: { color: 'rgba(22,56,50,0.5)', fontSize: 14 },
+    emptyText: { color: C.searchPlaceholder, fontSize: 14 },
 
     navBar: {
         position: 'absolute',
@@ -836,14 +962,13 @@ const s = StyleSheet.create({
         paddingTop: 12,
         paddingBottom: Platform.OS === 'ios' ? 28 : 16,
         borderTopWidth: 1,
-        borderTopColor: C.navDivider,
-        backgroundColor: C.navBg,
+        borderTopColor: C.divider,
+        // gradient applied
     },
     navItem: { alignItems: 'center', justifyContent: 'center', minWidth: 56 },
     navIconWrap: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-    navIconWrapActive: { backgroundColor: C.navActiveIcon },
-    navIcon: { fontSize: 22, color: C.navInactiveIcon },
-    navIconActive: { color: '#FFFFFF' },
+    navIcon: { fontSize: 24, color: C.navInactiveIcon },
+    navIconActive: { color: C.navActiveIcon, fontSize: 28 },
     navIconRaw: { fontSize: 22, opacity: 0.4 },
     navIconActiveRaw: { opacity: 1 },
 
@@ -869,7 +994,21 @@ const s = StyleSheet.create({
     expandedId: { color: C.primary, fontSize: 13, fontWeight: '500' },
     expandedCompleteBtn: { backgroundColor: C.primary, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10, marginLeft: 16 },
     expandedCompleteText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
-
+    groupChatBtn: {
+        backgroundColor: '#4FD1C5',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        borderRadius: 12,
+        gap: 8,
+        marginTop: 16,
+    },
+    groupChatText: {
+        color: '#0B1416',
+        fontWeight: '700',
+        fontSize: 15,
+    },
     infoCard: { backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)', marginBottom: 24, gap: 16 },
     infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
     infoIcon: { fontSize: 18, color: '#8EB69B', width: 24, textAlign: 'center' },
@@ -884,7 +1023,11 @@ const s = StyleSheet.create({
     participantRole: { color: '#8EB69B', fontSize: 12, marginTop: 2 },
     chatIcon: { fontSize: 20, color: C.primary },
     emptyListText: { color: '#64748B', fontSize: 14, fontStyle: 'italic', marginBottom: 24 },
-
+    callBtnWrap: {
+        width: 32, height: 32, borderRadius: 16,
+        backgroundColor: '#4FD1C5',
+        alignItems: 'center', justifyContent: 'center'
+    },
     emptyPendingCard: { alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent', borderRadius: 16, paddingHorizontal: 32, paddingVertical: 32, borderWidth: 1, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.1)', marginBottom: 24 },
     emptyPendingIcon: { fontSize: 32, color: 'rgba(14,129,33,0.3)', marginBottom: 12 },
     emptyPendingText: { color: '#64748B', fontSize: 14, textAlign: 'center' },

@@ -10,18 +10,19 @@ import {
     View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { profileService, PublicProfile, ReviewItem } from '../../services/profileService';
 
 // ── Palette ───────────────────────────────────────────────
 const C = {
-    bg: '#051F20',
-    card: '#0B2B26',
-    cardBorder: 'rgba(142,182,155,0.15)',
-    accent: '#8EB69B',
-    accentDark: '#235347',
+    bg: '#0b1416',
+    card: '#0F3D3E',
+    cardBorder: 'rgba(79, 209, 197, 0.15)',
+    accent: '#4fd1c5',
+    accentDark: 'rgba(79, 209, 197, 0.2)',
     text: '#FFFFFF',
     textMuted: 'rgba(255,255,255,0.5)',
-    divider: 'rgba(142,182,155,0.12)',
+    divider: 'rgba(79, 209, 197, 0.12)',
     star: '#F4C430',
 };
 
@@ -30,11 +31,14 @@ const ACTIVE_COLOR = '#4CAF82';
 // ── Star display ──────────────────────────────────────────
 const StarRow = ({ rating }: { rating: number }) => {
     const full = Math.floor(rating);
-    const empty = 5 - full;
+    const hasHalf = rating - full >= 0.5;
+    const empty = 5 - full - (hasHalf ? 1 : 0);
     return (
-        <Text style={{ color: C.star, fontSize: 16 }}>
-            {'★'.repeat(full)}{'☆'.repeat(empty)}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+            {[...Array(full)].map((_, i) => <Ionicons key={`f-${i}`} name="star" size={16} color={C.star} />)}
+            {hasHalf && <Ionicons name="star-half" size={16} color={C.star} />}
+            {[...Array(empty)].map((_, i) => <Ionicons key={`e-${i}`} name="star-outline" size={16} color={C.star} />)}
+        </View>
     );
 };
 
@@ -108,7 +112,7 @@ export default function PublicProfileScreen() {
             {/* ── Header ─────────────────────────────────── */}
             <View style={s.header}>
                 <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-                    <Text style={s.backText}>←</Text>
+                    <Ionicons name="arrow-back" size={24} color={C.text} />
                 </TouchableOpacity>
                 <Text style={s.headerTitle}>Profile</Text>
             </View>
@@ -124,12 +128,18 @@ export default function PublicProfileScreen() {
                         <Text style={s.fullName}>{profile.full_name}</Text>
                         {isVerified && (
                             <View style={s.verifiedBadge}>
-                                <Text style={s.verifiedText}>✅ Verified</Text>
+                                <Ionicons name="checkmark-circle" size={14} color="#FFF" style={{ marginRight: 4 }} />
+                                <Text style={s.verifiedText}>Verified</Text>
                             </View>
                         )}
                     </View>
                     <StarRow rating={profile.rating} />
-                    <Text style={s.subText}>⭐ {profile.rating.toFixed(1)}  ·  🤝 {profile.total_buddy_matches} matches</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                        <Ionicons name="star" size={14} color={C.star} />
+                        <Text style={s.subText}> {profile.rating.toFixed(1)}  ·  </Text>
+                        <Ionicons name="people" size={14} color={C.accent} />
+                        <Text style={s.subText}> {profile.total_buddy_matches} matches</Text>
+                    </View>
                 </View>
             </View>
 

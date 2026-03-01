@@ -33,7 +33,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Load initial state
         const loadUser = async () => {
             try {
-                const storedUser = await AsyncStorage.getItem('user');
+                const [storedUser] = await Promise.all([
+                    AsyncStorage.getItem('user'),
+                    new Promise(resolve => setTimeout(resolve, 1500)) // Artificial Splash Screen delay
+                ]);
+
                 if (storedUser) {
                     setUser(JSON.parse(storedUser));
                 }
@@ -60,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
             await AsyncStorage.multiRemove(['userToken', 'user', 'userId']);
             setUser(null);
-            router.replace('/auth/login');
+            router.replace('/');
         } catch (e) {
             console.error('Failed to sign out', e);
         }
@@ -88,7 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!user) {
             // Unauthenticated: Can only access root or auth group
             if (inProtectedGroup) {
-                router.replace('/auth/login');
+                router.replace('/');
             }
         } else {
             // Authenticated: Strict routing based on state

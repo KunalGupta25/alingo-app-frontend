@@ -13,7 +13,7 @@ export default function WelcomeScreen() {
         <View style={styles.container}>
             {/* Background Gradient */}
             <LinearGradient
-                colors={[COLORS.primaryDark, COLORS.dark, COLORS.mediumDark]}
+                colors={['#174A4C', '#0B1416']}
                 style={StyleSheet.absoluteFillObject}
             />
 
@@ -65,7 +65,7 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: COLORS.background,
+        backgroundColor: '#0B1416',
     },
     content: {
         flex: 1,
@@ -80,78 +80,84 @@ const styles = StyleSheet.create({
     logo: {
         fontSize: 56,
         fontWeight: 'bold',
-        color: COLORS.text,
+        color: '#4FD1C5',
         letterSpacing: 3,
         marginBottom: SPACING.md,
     },
     tagline: {
         fontSize: 20,
         fontWeight: '600',
-        color: COLORS.lightGreen,
+        color: '#A3e635',
         marginBottom: SPACING.sm,
     },
     subtitle: {
         fontSize: 16,
-        color: COLORS.textSecondary,
+        color: '#FFFFFF',
+        opacity: 0.8,
         textAlign: 'center',
         lineHeight: 24,
     },
     card: {
-        backgroundColor: COLORS.lightGreen,
+        backgroundColor: '#0B2728',
         borderTopLeftRadius: BORDER_RADIUS.xl * 1.5,
         borderTopRightRadius: BORDER_RADIUS.xl * 1.5,
         paddingHorizontal: SPACING.xl,
         paddingTop: SPACING.xxl,
         paddingBottom: SPACING.xxl + SPACING.lg,
         minHeight: 320,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(79, 209, 197, 0.15)',
     },
     welcomeTitle: {
         fontSize: 28,
         fontWeight: 'bold',
-        color: COLORS.inputText,
+        color: '#FFFFFF',
         marginBottom: SPACING.sm,
     },
     welcomeSubtitle: {
         fontSize: 16,
-        color: COLORS.inputText,
-        opacity: 0.8,
+        color: '#8EB69B',
         marginBottom: SPACING.xl,
     },
     loginButton: {
-        backgroundColor: COLORS.button,
-        borderRadius: BORDER_RADIUS.md,
-        paddingVertical: SPACING.md + 6,
+        backgroundColor: '#4FD1C5',
+        paddingVertical: SPACING.md,
+        borderRadius: BORDER_RADIUS.lg,
         alignItems: 'center',
         marginBottom: SPACING.md,
+        shadowColor: '#4FD1C5',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 5,
     },
     loginButtonText: {
-        color: COLORS.buttonText,
+        color: '#0B1416',
         fontSize: 18,
-        fontWeight: '600',
+        fontWeight: 'bold',
     },
     signupButton: {
         backgroundColor: 'transparent',
         borderWidth: 2,
-        borderColor: COLORS.button,
-        borderRadius: BORDER_RADIUS.md,
-        paddingVertical: SPACING.md + 4,
+        borderColor: '#4FD1C5',
+        borderRadius: BORDER_RADIUS.lg,
+        paddingVertical: SPACING.md,
         alignItems: 'center',
         marginBottom: SPACING.lg,
     },
     signupButtonText: {
-        color: COLORS.button,
+        color: '#4FD1C5',
         fontSize: 18,
-        fontWeight: '600',
+        fontWeight: 'bold',
     },
     termsText: {
         fontSize: 13,
-        color: COLORS.inputText,
+        color: '#8EB69B',
         textAlign: 'center',
-        opacity: 0.7,
         lineHeight: 20,
     },
     termsLink: {
         fontWeight: '600',
-        opacity: 1,
+        color: '#A3e635',
     },
 });
